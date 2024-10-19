@@ -8,9 +8,6 @@ import pandas as pd
 
 from UniversalWebshopScraper.generalized_scrapper.functions import detect_captcha_detector, normalize_price, normalize_url
 
-# TODO add proper comments
-# TODO move between pages and get the data from them
-
 CURRENCY_PATTER = r"(\$|€|£|zł|PLN|USD|GBP|JPY|AUD)"
 PRICE_PATTERN = r"(\d+(?:[.,]\d{3})*(?:[.,]\d\d))"
 COST_PATTERN = f"{PRICE_PATTERN}\s*{CURRENCY_PATTER}|{CURRENCY_PATTER}\s*{PRICE_PATTERN}"
@@ -26,7 +23,6 @@ class GeneralizedScraper:
         self.stored_products = []  # List to store gathered products (dict format)
 
     def initialize_driver(self):
-        #TODO repair this
         options = uc.ChromeOptions()
         user_data_dir = r"C:\Users\<YourUsername>\AppData\Local\Google\Chrome\User Data"
         profile = "Profile 1"
@@ -48,13 +44,13 @@ class GeneralizedScraper:
         return True
 
     def open_home_page_and_navigate_to_product(self, home_url, search_url):
-        """Step 2 and 3: Open the homepage and navigate to the search URL"""
+        """Open the homepage and navigate to the search URL"""
         try:
             self.driver.get(home_url)
             self.random_delay()
             self.driver.get(search_url)
             self.random_delay()
-            soup =  self.extract_page_structure()
+            soup = self.extract_page_structure()
             if self.is_captcha_present(soup):
                 input("Resolve Captcha and click enter button")
             return True
@@ -81,8 +77,6 @@ class GeneralizedScraper:
     def detect_product_blocks(self, soup):
         """Detect product blocks by finding the smallest subtrees that fulfill the requirements,
         skipping elements that are inside STRIKETHROUGH class."""
-
-        # Find all blocks in the soup
         blocks = soup.find_all(['div', 'li', 'article', 'span', 'ul'], recursive=True)
         blocks.sort(key=lambda x: len(list(x.parents)), reverse=True)
 
@@ -94,48 +88,39 @@ class GeneralizedScraper:
                 self.mark_block_and_children(block)
                 product_url, image_url, price, title = self.extract_product_info(block)
 
-                # Skip STRIKETHROUGH elements only when extracting prices
                 filtered_price = self.filter_strikethrough_prices(block, price)
 
                 if filtered_price:  # Only process if there is a valid price
                     price, currency = self._get_price_currency(filtered_price)
 
-                    # Ensure product uniqueness
                     if product_url in self.detected_products:
                         continue
                     self.detected_products.add(product_url)
 
-                    # Avoid duplicate image URLs using ordered set
                     if image_url in self.detected_image_urls:
                         continue
                     self.detected_image_urls.add(image_url)  # Mark this image URL as processed
 
-                    # if product_url had not / at start add it
                     if not product_url.startswith("http"):
-                        # If the URL doesn't start with "/", add it
                         if not product_url.startswith("/"):
                             product_url = f"/{product_url}"
-
-                        # Prepend the base URL (shopping website)
                         product_url = f"{self.shopping_website}{product_url}"
 
-                    # Store product information
                     self.store_product(product_url, image_url, price, currency, title)
 
-                    print("\n--- Detected Product Block ---")
-                    print(f"Website: {self.shopping_website}")
-                    print(f"Product URL: {product_url}")
-                    print(f"Image URL: {image_url}")
-                    print(f"Price: {price}")
-                    print(f"Currency: {currency}")
-                    print(f"Title: {title}")
-                    print("--- End of Product Block ---\n")
+                    #print("\n--- Detected Product Block ---")
+                    #print(f"Website: {self.shopping_website}")
+                    #print(f"Product URL: {product_url}")
+                    #print(f"Image URL: {image_url}")
+                    #print(f"Price: {price}")
+                    #print(f"Currency: {currency}")
+                    #print(f"Title: {title}")
+                    #print("--- End of Product Block ---\n")
 
                     self.product_count += 1
 
     def filter_strikethrough_prices(self, block, price):
         """Filter out any price that is inside an element with the STRIKETHROUGH class."""
-        # Check if the price or parent elements have the 'STRIKETHROUGH' class
         if block.find(class_='STRIKETHROUGH'):
             return None  # Skip if it's a strikethrough price
         return price
@@ -157,7 +142,6 @@ class GeneralizedScraper:
         """Find the product URL inside a block."""
         product_url = block.find('a', href=True)
         if product_url:
-            # Normalize the URL
             return normalize_url(self.shopping_website, product_url['href'])
         return None
 
@@ -165,10 +149,8 @@ class GeneralizedScraper:
         """Find the image URL inside a block (either img tag or inline style)."""
         img_tag = block.find('img', src=True)
         if img_tag:
-            # Normalize the image URL
             return normalize_url(self.shopping_website, img_tag['src'])
 
-        # Check for background images in inline styles (span or div)
         style = block.get('style')
         if style and 'background-image' in style:
             match = re.search(r'url\((.*?)\)', style)
@@ -179,38 +161,30 @@ class GeneralizedScraper:
 
     def _get_max_price(self, price_tags):
         """Get the maximum price from price_tags, assuming prices with STRIKETHROUGH have been filtered out."""
-        # TODO maybe we can do it even better
-
-        # Start with the first valid price tag
         max_price_tag = price_tags[0]
         max_price = price_tags[0][0] if price_tags[0][0] else price_tags[0][3]
-
-        # Normalize the first price
         max_price = float(normalize_price(max_price))
 
-        # Iterate through the price tags and find the maximum price
         for pt in price_tags:
             price = pt[0] if pt[0] else pt[3]
             price = float(normalize_price(price))  # Normalize each price before comparison
 
-            # Change comparison to find the maximum price
             if price > max_price:
                 max_price_tag = pt
                 max_price = price
 
         return max_price_tag
 
-    def _get_price_currency(self, full_pirce):
-        price = re.findall(COST_PATTERN, full_pirce)
+    def _get_price_currency(self, full_price):
+        price = re.findall(COST_PATTERN, full_price)
         return price[0][0] + price[0][3], price[0][1] + price[0][2]
 
     def find_price(self, block):
-        """Look for price information in the block (currency symbols like $, €, PLN, etc.)."""
+        """Look for price information in the block."""
         price_pattern = re.compile(COST_PATTERN)
         price_tags = re.findall(price_pattern, block.text)
 
         if price_tags:
-            # Extract the correct price using the maximum price logic
             max_price = self._get_max_price(price_tags)
             return "".join(max_price)
 
@@ -218,18 +192,14 @@ class GeneralizedScraper:
 
     def find_title(self, block):
         """Look for a string that is likely the product title."""
-        # TODO update this function to get the title from the block!
-        # Prioritize semantic tags commonly used for titles
         title_tags = block.find_all(['h1', 'h2', 'h3', 'span', 'a', 'div'])
 
         for tag in title_tags:
-            # Extract text and check for reasonable length and content
             if 'title' in tag.get('class', []) or 'name' in tag.get('class', []):
                 text_content = tag.get_text(strip=True)
                 if len(text_content) > 10 and not re.search(r'\d{1,2}[.,]\d{1,2}\s*[a-zA-Z]*', text_content):
                     return text_content
 
-        # Fallback to extracting the longest text content
         longest_text = max(block.stripped_strings, key=len, default="")
         if len(longest_text) > 10 and not re.search(r'\d{1,2}[.,]\d{1,2}\s*[a-zA-Z]*', longest_text):
             return longest_text
@@ -262,89 +232,147 @@ class GeneralizedScraper:
         if self.driver:
             self.driver.quit()
 
+    def scroll_to_bottom(self, max_scrolls=10, scroll_pause_time=2):
+        """Scrolls down the page to load more products."""
+        last_height = self.driver.execute_script("return document.body.scrollHeight")
+
+        for i in range(max_scrolls):
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            self.random_delay(scroll_pause_time, scroll_pause_time + 2)
+
+            new_height = self.driver.execute_script("return document.body.scrollHeight")
+            if new_height == last_height:  # No more content to load
+                break
+            last_height = new_height
+
+        print(f"Scrolled {i + 1} times")
+
+    def go_to_next_page(self):
+        """Go to the next page by clicking the 'Next' button, if it exists."""
+        try:
+            next_button = self.driver.find_element_by_xpath("//a[contains(text(), 'Next')]")
+            if next_button:
+                next_button.click()
+                self.random_delay()
+                return True
+        except Exception as e:
+            print(f"Failed to find or click the 'Next' button: {e}")
+        return False
+
+    def scrape_multiple_pages(self, max_pages=5, url_template=None, page_number_supported=True):
+        """Scrape multiple pages by navigating through the pagination."""
+        page_count = 1
+        while page_count <= max_pages:
+            print(f"Scraping page {page_count}")
+            if page_number_supported and url_template:
+                # Insert the page_number in the URL dynamically if page_number is supported
+                search_url = url_template.format(page_number=page_count)
+                self.driver.get(search_url)
+                self.random_delay()
+            else:
+                soup = self.extract_page_structure()
+                self.detect_product_blocks(soup)
+                if not self.go_to_next_page():  # No "Next" button found or cannot go to the next page
+                    break
+
+            soup = self.extract_page_structure()
+            self.detect_product_blocks(soup)
+
+            page_count += 1
+
+    def scrape_all_products(self, scroll_based=False, max_pages=5, max_scrolls=5, url_template=None, page_number_supported=True):
+        """Scrape all products from the current page using either scroll or pagination."""
+        if scroll_based:
+            self.scroll_to_bottom(max_scrolls)  # Use scrolling if the site is infinite scroll based
+            soup = self.extract_page_structure()
+            self.detect_product_blocks(soup)
+        else:
+            self.scrape_multiple_pages(max_pages=max_pages, url_template=url_template, page_number_supported=page_number_supported)
+
 
 if __name__ == "__main__":
     search_query = "tv"
 
-    ### Test Temu ###
+    def run_old_method(scraper, search_url_template, base_url, save_csv_name):
+        """Run the old method without scrolling or pagination"""
+        scraper.open_home_page_and_navigate_to_product(base_url, search_url_template)
+        soup = scraper.extract_page_structure()
+        scraper.detect_product_blocks(soup)
+        old_method_count = scraper.product_count
+        # scraper.save_to_csv(f'old_{save_csv_name}')
+        scraper.close_driver()
+        return old_method_count
+
+    def run_new_method(scraper, search_url_template, base_url, save_csv_name, scroll_based=False, page_number_supported=True):
+        """Run the new method with scrolling or pagination"""
+        scraper.open_home_page_and_navigate_to_product(base_url, search_url_template)
+        scraper.scrape_all_products(scroll_based=scroll_based, url_template=search_url_template, page_number_supported=page_number_supported)
+        new_method_count = scraper.product_count
+        # scraper.save_to_csv(f'new_{save_csv_name}')
+        scraper.close_driver()
+        return new_method_count
+
+    ### Test Temu (scroll-based) ###
     home_url_temu = "https://www.temu.com"
+    temu_search_url_template = "{base_url}/search_result.html?search_key={query}&search_method=user".format(
+        base_url=home_url_temu, query=search_query.replace(" ", "+"))
+
     scraper = GeneralizedScraper(shopping_website=home_url_temu)
+    old_temu_count = run_old_method(scraper, temu_search_url_template, home_url_temu, 'temu_products.csv')
+    print(f"Old Temu product count: {old_temu_count}")
 
-    temu_search_url_template = "{base_url}/search_result.html?search_key={query}&search_method=user"
-    scraper.open_home_page_and_navigate_to_product(home_url_temu,
-                                                   temu_search_url_template.format(base_url=home_url_temu,
-                                                                                   query=search_query.replace(" ",
-                                                                                                              "+")))
-    soup_temu = scraper.extract_page_structure()
+    scraper = GeneralizedScraper(shopping_website=home_url_temu)
+    new_temu_count = run_new_method(scraper, temu_search_url_template, home_url_temu, 'temu_products.csv', scroll_based=True, page_number_supported=False)
+    print(f"New Temu product count: {new_temu_count}")
 
-    print('Temu:')
-    scraper.detect_product_blocks(soup_temu)
-    print(f"Detected {scraper.product_count} products.")
-    scraper.close_driver()
-
-    ### Test Amazon ###
+    ### Test Amazon (pagination-based) ###
     home_url_amazon = "https://www.amazon.com"
+    amazon_search_url_template = "{base_url}/s?k={query}&page={{page_number}}".format(
+        base_url=home_url_amazon, query=search_query.replace(" ", "+")
+    )
     scraper = GeneralizedScraper(shopping_website=home_url_amazon)
+    old_amazon_count = run_old_method(scraper, amazon_search_url_template, home_url_amazon, 'amazon_products.csv')
+    print(f"Old Amazon product count: {old_amazon_count}")
 
-    amazon_search_url_template = "{base_url}/s?k={query}"
-    scraper.open_home_page_and_navigate_to_product(home_url_amazon,
-                                                   amazon_search_url_template.format(base_url=home_url_amazon,
-                                                                                     query=search_query.replace(" ",
-                                                                                                                "+")))
-    soup_amazon = scraper.extract_page_structure()
+    scraper = GeneralizedScraper(shopping_website=home_url_amazon)
+    new_amazon_count = run_new_method(scraper, amazon_search_url_template, home_url_amazon, 'amazon_products.csv', scroll_based=False, page_number_supported=True)
+    print(f"New Amazon product count: {new_amazon_count}")
 
-    print('Amazon:')
-    scraper.detect_product_blocks(soup_amazon)
-    print(f"Detected {scraper.product_count} products.")
-    scraper.close_driver()
-
-    ### Test Allegro ###
+    ### Test Allegro (pagination-based) ###
     home_url_allegro = "https://www.allegro.pl"
+    allegro_search_url_template = '{base_url}/listing?string={query}&p={page_number}'.format(
+        base_url=home_url_allegro, query=search_query.replace(" ", "+")
+    )
     scraper = GeneralizedScraper(shopping_website=home_url_allegro)
+    old_allegro_count = run_old_method(scraper, allegro_search_url_template, home_url_allegro, 'allegro_products.csv')
+    print(f"Old Allegro product count: {old_allegro_count}")
 
-    allegro_search_url_template = "{base_url}/listing?string={query}"
-    scraper.open_home_page_and_navigate_to_product(home_url_allegro,
-                                                   allegro_search_url_template.format(base_url=home_url_allegro,
-                                                                                      query=search_query.replace(" ",
-                                                                                                                 "+")))
-    soup_allegro = scraper.extract_page_structure()
+    scraper = GeneralizedScraper(shopping_website=home_url_allegro)
+    new_allegro_count = run_new_method(scraper, allegro_search_url_template, home_url_allegro, 'allegro_products.csv', scroll_based=False, page_number_supported=True)
+    print(f"New Allegro product count: {new_allegro_count}")
 
-    print('Allegro:')
-    scraper.detect_product_blocks(soup_allegro)
-    print(f"Detected {scraper.product_count} products.")
-    scraper.close_driver()
-
-    ### Test eBay ###
+    ### Test eBay (pagination-based) ###
     home_url_ebay = "https://www.ebay.com"
+    ebay_search_url_template = "{base_url}/sch/i.html?_nkw={query}&_pgn={page_number}".format(
+        base_url=home_url_ebay, query=search_query.replace(" ", "+")
+    )
     scraper = GeneralizedScraper(shopping_website=home_url_ebay)
+    old_ebay_count = run_old_method(scraper, ebay_search_url_template, home_url_ebay, 'ebay_products.csv')
+    print(f"Old eBay product count: {old_ebay_count}")
 
-    ebay_search_url_template = "{base_url}/sch/i.html?_from=R40&_trksid=p4432023.m570.l1313&_nkw={query}&_sacat=0"
-    scraper.open_home_page_and_navigate_to_product(home_url_ebay,
-                                                   ebay_search_url_template.format(base_url=home_url_ebay,
-                                                                                   query=search_query.replace(" ",
-                                                                                                              "+")))
-    soup_ebay = scraper.extract_page_structure()
+    scraper = GeneralizedScraper(shopping_website=home_url_ebay)
+    new_ebay_count = run_new_method(scraper, ebay_search_url_template, home_url_ebay, 'ebay_products.csv', scroll_based=False, page_number_supported=True)
+    print(f"New eBay product count: {new_ebay_count}")
 
-    print('eBay:')
-    scraper.detect_product_blocks(soup_ebay)
-    print(f"Detected {scraper.product_count} products.")
-    scraper.close_driver()
-
-    # aliexpress
-    # TODO repair this part
+    ### Test Aliexpress (scroll-based) ###
     home_url_aliexpress = "https://www.aliexpress.com"
+    aliexpress_search_url_template = "{base_url}/w/wholesale-{query}.html?spm=a2g0o.productlist.auto_suggest.2.41fb15faIlHSvj".format(
+        base_url=home_url_aliexpress, query=search_query.replace(" ", "-")
+    )
     scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
+    old_aliexpress_count = run_old_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products.csv')
+    print(f"Old Aliexpress product count: {old_aliexpress_count}")
 
-    # https://www.aliexpress.us/w/wholesale-jacketd-men.html?spm=a2g0o.productlist.auto_suggest.2.41fb15faIlHSvj
-    aliexpress_search_url_template = "{base_url}/w/wholesale-{query}.html?spm=a2g0o.productlist.auto_suggest.2.41fb15faIlHSvj"
-    scraper.open_home_page_and_navigate_to_product(home_url_aliexpress,
-                                                   aliexpress_search_url_template.format(base_url=home_url_aliexpress,
-                                                                                   query=search_query.replace(" ",
-                                                                                                              "-")))
-    soup_aliexpress = scraper.extract_page_structure()
-
-    print('Aliexpress:')
-    scraper.detect_product_blocks(soup_aliexpress)
-    print(f"Detected {scraper.product_count} products.")
-    scraper.close_driver()
-
+    scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
+    new_aliexpress_count = run_new_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products.csv', scroll_based=True, page_number_supported=False)
+    print(f"New Aliexpress product count: {new_aliexpress_count}")
