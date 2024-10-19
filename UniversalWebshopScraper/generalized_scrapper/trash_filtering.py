@@ -1,0 +1,1 @@
+# TODO add filtering of the blocks that are not products (like ads, banners, etc.)

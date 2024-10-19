@@ -1,0 +1,1 @@
+# TODO write script for searching new names/words on the pages ('jacket' and others)
