@@ -1,6 +1,6 @@
 import os
 
-from agents.generalized_scrapper.generalized_scrapper import GeneralizedScraper
+from UniversalWebshopScraper.generalized_scrapper.generalized_scrapper import GeneralizedScraper
 
 if __name__ == "__main__":
     # Categories and products to search for

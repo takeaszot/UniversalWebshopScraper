@@ -6,7 +6,7 @@ import re
 from sortedcontainers import SortedSet
 import pandas as pd
 
-from agents.generalized_scrapper.functions import detect_captcha_detector, normalize_price, normalize_url
+from UniversalWebshopScraper.generalized_scrapper.functions import detect_captcha_detector, normalize_price, normalize_url
 
 # TODO add proper comments
 # TODO move between pages and get the data from them
