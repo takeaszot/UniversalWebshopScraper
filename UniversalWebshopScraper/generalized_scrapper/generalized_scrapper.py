@@ -197,9 +197,19 @@ class GeneralizedScraper:
         return price[0][0] + price[0][3], price[0][1] + price[0][2]
 
     def find_price(self, block):
-        """Look for price information in the block."""
+        """Look for price information in the block, including cases with multi-span prices."""
+        # Find all span elements within the block
+        price_spans = block.find_all('span', recursive=True)
+        price_parts = []
+        full_text = ""
+
+        for span in price_spans:
+            text = span.get_text(strip=True)
+            full_text += text  # Combine all text content from spans into a single string
+
+        # Now apply your COST_PATTERN to the combined text
         price_pattern = re.compile(COST_PATTERN)
-        price_tags = re.findall(price_pattern, block.text)
+        price_tags = re.findall(price_pattern, full_text)
 
         if price_tags:
             max_price = self._get_max_price(price_tags)
