@@ -5,8 +5,14 @@ from bs4 import BeautifulSoup
 import re
 from sortedcontainers import SortedSet
 import pandas as pd
+import os
 
 from UniversalWebshopScraper.generalized_scrapper.functions import detect_captcha_detector, normalize_price, normalize_url
+
+"""
+
+
+"""
 
 CURRENCY_PATTER = r"(\$|€|£|zł|PLN|USD|GBP|JPY|AUD)"
 PRICE_PATTERN = r"(\d+(?:[.,]\d{3})*(?:[.,]\d\d))"
@@ -38,17 +44,28 @@ class GeneralizedScraper:
 
     def is_captcha_present(self, soup):
         """Detect if a CAPTCHA is present based on interaction blocking elements and structural clues."""
-        price_tags = re.search(COST_PATTERN, soup.text)
+        price_tags = re.search(COST_PATTERN, soup.text) # TODO THIS BETTER
         if price_tags:
             return False
         return True
 
-    def open_home_page_and_navigate_to_product(self, home_url, search_url):
+    def open_home_page(self, home_url):
         """Open the homepage and navigate to the search URL"""
         try:
             self.driver.get(home_url)
             self.random_delay()
-            self.driver.get(search_url)
+            #soup = self.extract_page_structure()
+            #if self.is_captcha_present(soup):
+                #input("Resolve Captcha and click enter button")
+            return True
+        except Exception as e:
+            print(f"Failed to navigate to the product URL: {e}")
+            return False
+
+    def open_search_url(self, search_url):
+        """Open the search URL and resolve CAPTCHA if detected."""
+        try:
+            self.driver.get(search_url.format(page_number=1))
             self.random_delay()
             soup = self.extract_page_structure()
             if self.is_captcha_present(soup):
@@ -56,7 +73,7 @@ class GeneralizedScraper:
             return True
         except Exception as e:
             print(f"Failed to navigate to the product URL: {e}")
-            return False
+            return
 
     def extract_page_structure(self):
         """Extract the page's HTML content using BeautifulSoup"""
@@ -108,14 +125,14 @@ class GeneralizedScraper:
 
                     self.store_product(product_url, image_url, price, currency, title)
 
-                    #print("\n--- Detected Product Block ---")
-                    #print(f"Website: {self.shopping_website}")
-                    #print(f"Product URL: {product_url}")
-                    #print(f"Image URL: {image_url}")
-                    #print(f"Price: {price}")
-                    #print(f"Currency: {currency}")
-                    #print(f"Title: {title}")
-                    #print("--- End of Product Block ---\n")
+                    print("\n--- Detected Product Block ---")
+                    print(f"Website: {self.shopping_website}")
+                    print(f"Product URL: {product_url}")
+                    print(f"Image URL: {image_url}")
+                    print(f"Price: {price}")
+                    print(f"Currency: {currency}")
+                    print(f"Title: {title}")
+                    print("--- End of Product Block ---\n")
 
                     self.product_count += 1
 
@@ -216,11 +233,27 @@ class GeneralizedScraper:
             if child not in self.marked_blocks:
                 self.marked_blocks.append(child)
 
-    def save_to_csv(self, save_path):
-        """Save the stored products to a CSV file."""
+    def save_to_csv(self, save_path=None):
+        """Save the stored products to a CSV file inside a directory for each e-commerce website."""
         if self.stored_products:
+            # Extract website name from the URL for folder naming
+            website_name = self.shopping_website.replace("https://", "").replace("www.", "").split('.')[0]
+
+            # Create directory for the specific website inside the 'scraped_data' folder
+            save_dir = os.path.join('scraped_data', website_name)
+
+            # Create the directory if it doesn't exist
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+
+            # Create the full path for the CSV file
+            csv_filename = f'{save_path}' if save_path else f'{website_name}_products.csv'
+            save_path = os.path.join(save_dir, csv_filename)
+
+            # Save the products to the CSV file
             df = pd.DataFrame(self.stored_products)
             df.to_csv(save_path, index=False)
+
             print(f"Saved {len(self.stored_products)} products to {save_path}")
         else:
             print("No products to save.")
@@ -232,17 +265,23 @@ class GeneralizedScraper:
         if self.driver:
             self.driver.quit()
 
-    def scroll_to_bottom(self, max_scrolls=10, scroll_pause_time=2):
-        """Scrolls down the page to load more products."""
+    def scroll_to_bottom(self, max_scrolls=10, scroll_pause_time=1):
+        """Scroll down the page a set number of times to load more products."""
+
         last_height = self.driver.execute_script("return document.body.scrollHeight")
 
         for i in range(max_scrolls):
+            # Scroll to the bottom of the page
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             self.random_delay(scroll_pause_time, scroll_pause_time + 2)
 
+            # Wait for new content to load
             new_height = self.driver.execute_script("return document.body.scrollHeight")
-            if new_height == last_height:  # No more content to load
+
+            # Break if the page height hasn't changed, meaning no new content
+            if new_height == last_height:
                 break
+
             last_height = new_height
 
         print(f"Scrolled {i + 1} times")
@@ -259,58 +298,69 @@ class GeneralizedScraper:
             print(f"Failed to find or click the 'Next' button: {e}")
         return False
 
-    def scrape_multiple_pages(self, max_pages=5, url_template=None, page_number_supported=True):
-        """Scrape multiple pages by navigating through the pagination."""
+    def scrape_all_products(self, scroll_based=False, max_pages=5, max_scrolls=5, url_template=None,
+                            page_number_supported=True):
+        """Scrape all products using scrolling and pagination together when both are True."""
+
         page_count = 1
         while page_count <= max_pages:
             print(f"Scraping page {page_count}")
+
+            # Load the current page using pagination if supported
             if page_number_supported and url_template:
-                # Insert the page_number in the URL dynamically if page_number is supported
                 search_url = url_template.format(page_number=page_count)
                 self.driver.get(search_url)
                 self.random_delay()
+
+            # Scroll down the page if scroll_based is True
+            if scroll_based:
+                self.scroll_to_bottom(max_scrolls)  # Scroll down to load more products on the current page
+
+            # Extract product blocks after scrolling
+            soup = self.extract_page_structure()
+            self.detect_product_blocks(soup)
+
+            # Handle pagination if supported, otherwise just scroll and stop
+            if page_number_supported:
+                page_count += 1
             else:
-                soup = self.extract_page_structure()
-                self.detect_product_blocks(soup)
-                if not self.go_to_next_page():  # No "Next" button found or cannot go to the next page
-                    break
-
-            soup = self.extract_page_structure()
-            self.detect_product_blocks(soup)
-
-            page_count += 1
-
-    def scrape_all_products(self, scroll_based=False, max_pages=5, max_scrolls=5, url_template=None, page_number_supported=True):
-        """Scrape all products from the current page using either scroll or pagination."""
-        if scroll_based:
-            self.scroll_to_bottom(max_scrolls)  # Use scrolling if the site is infinite scroll based
-            soup = self.extract_page_structure()
-            self.detect_product_blocks(soup)
-        else:
-            self.scrape_multiple_pages(max_pages=max_pages, url_template=url_template, page_number_supported=page_number_supported)
-
+                break  # Stop after scrolling if pagination is not supported
 
 if __name__ == "__main__":
     search_query = "tv"
 
-    def run_old_method(scraper, search_url_template, base_url, save_csv_name):
-        """Run the old method without scrolling or pagination"""
-        scraper.open_home_page_and_navigate_to_product(base_url, search_url_template)
+    def run_old_method(scraper, search_url_template, base_url, csv_file_name):
+        """Run the old method without scrolling or pagination and save the results."""
+        scraper.open_home_page(base_url)
+        scraper.open_search_url(search_url_template)
         soup = scraper.extract_page_structure()
         scraper.detect_product_blocks(soup)
         old_method_count = scraper.product_count
-        # scraper.save_to_csv(f'old_{save_csv_name}')
+        scraper.save_to_csv(csv_file_name)  # Save to the appropriate shop folder
         scraper.close_driver()
         return old_method_count
 
-    def run_new_method(scraper, search_url_template, base_url, save_csv_name, scroll_based=False, page_number_supported=True):
-        """Run the new method with scrolling or pagination"""
-        scraper.open_home_page_and_navigate_to_product(base_url, search_url_template)
+    def run_new_method(scraper, search_url_template, base_url, csv_file_name, scroll_based=False, page_number_supported=True):
+        """Run the new method with scrolling or pagination and save the results."""
+        scraper.open_home_page(base_url)
+        scraper.open_search_url(search_url_template)
         scraper.scrape_all_products(scroll_based=scroll_based, url_template=search_url_template, page_number_supported=page_number_supported)
         new_method_count = scraper.product_count
-        # scraper.save_to_csv(f'new_{save_csv_name}')
+        scraper.save_to_csv(csv_file_name)  # Save to the appropriate shop folder
         scraper.close_driver()
         return new_method_count
+
+    ### Test Aliexpress (scroll-based) ###
+    home_url_aliexpress = "https://www.aliexpress.com"
+    aliexpress_search_url_template = "{home_url}/w/wholesale-{query}.html?page={{page_number}}".format(home_url=home_url_aliexpress, query=search_query.replace(" ", "+"))
+
+    scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
+    old_aliexpress_count = run_old_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products.csv')
+    print(f"Old Aliexpress product count: {old_aliexpress_count}")
+
+    scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
+    new_aliexpress_count = run_new_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products_new.csv', scroll_based=True, page_number_supported=True)
+    print(f"New Aliexpress product count: {new_aliexpress_count}")
 
     ### Test Temu (scroll-based) ###
     home_url_temu = "https://www.temu.com"
@@ -322,57 +372,44 @@ if __name__ == "__main__":
     print(f"Old Temu product count: {old_temu_count}")
 
     scraper = GeneralizedScraper(shopping_website=home_url_temu)
-    new_temu_count = run_new_method(scraper, temu_search_url_template, home_url_temu, 'temu_products.csv', scroll_based=True, page_number_supported=False)
+    new_temu_count = run_new_method(scraper, temu_search_url_template, home_url_temu, 'temu_products_new.csv', scroll_based=True, page_number_supported=False)
     print(f"New Temu product count: {new_temu_count}")
 
     ### Test Amazon (pagination-based) ###
     home_url_amazon = "https://www.amazon.com"
-    amazon_search_url_template = "{base_url}/s?k={query}&page={{page_number}}".format(
-        base_url=home_url_amazon, query=search_query.replace(" ", "+")
-    )
+    amazon_search_url_template = "{base_url}/s?k={query}&page={{page_number}}".format(base_url=home_url_amazon, query=search_query.replace(" ", "+"))
+
     scraper = GeneralizedScraper(shopping_website=home_url_amazon)
     old_amazon_count = run_old_method(scraper, amazon_search_url_template, home_url_amazon, 'amazon_products.csv')
     print(f"Old Amazon product count: {old_amazon_count}")
 
     scraper = GeneralizedScraper(shopping_website=home_url_amazon)
-    new_amazon_count = run_new_method(scraper, amazon_search_url_template, home_url_amazon, 'amazon_products.csv', scroll_based=False, page_number_supported=True)
+    new_amazon_count = run_new_method(scraper, amazon_search_url_template, home_url_amazon, 'amazon_products_new.csv', scroll_based=True, page_number_supported=True)
     print(f"New Amazon product count: {new_amazon_count}")
 
     ### Test Allegro (pagination-based) ###
     home_url_allegro = "https://www.allegro.pl"
-    allegro_search_url_template = '{base_url}/listing?string={query}&p={page_number}'.format(
-        base_url=home_url_allegro, query=search_query.replace(" ", "+")
-    )
+    # Corrected URL template with double curly braces for page_number
+    allegro_search_url_template = f'{home_url_allegro}/listing?string={search_query.replace(" ", "+")}&p={{page_number}}'
+
     scraper = GeneralizedScraper(shopping_website=home_url_allegro)
     old_allegro_count = run_old_method(scraper, allegro_search_url_template, home_url_allegro, 'allegro_products.csv')
     print(f"Old Allegro product count: {old_allegro_count}")
 
     scraper = GeneralizedScraper(shopping_website=home_url_allegro)
-    new_allegro_count = run_new_method(scraper, allegro_search_url_template, home_url_allegro, 'allegro_products.csv', scroll_based=False, page_number_supported=True)
+    new_allegro_count = run_new_method(scraper, allegro_search_url_template, home_url_allegro,
+                                       'allegro_products_new.csv', scroll_based=True, page_number_supported=True)
     print(f"New Allegro product count: {new_allegro_count}")
 
     ### Test eBay (pagination-based) ###
     home_url_ebay = "https://www.ebay.com"
-    ebay_search_url_template = "{base_url}/sch/i.html?_nkw={query}&_pgn={page_number}".format(
-        base_url=home_url_ebay, query=search_query.replace(" ", "+")
-    )
+    ebay_search_url_template = "{base_url}/sch/i.html?_nkw={query}&_pgn={{page_number}}".format(
+        base_url=home_url_ebay, query=search_query.replace(" ", "+"))
+
     scraper = GeneralizedScraper(shopping_website=home_url_ebay)
     old_ebay_count = run_old_method(scraper, ebay_search_url_template, home_url_ebay, 'ebay_products.csv')
     print(f"Old eBay product count: {old_ebay_count}")
 
     scraper = GeneralizedScraper(shopping_website=home_url_ebay)
-    new_ebay_count = run_new_method(scraper, ebay_search_url_template, home_url_ebay, 'ebay_products.csv', scroll_based=False, page_number_supported=True)
+    new_ebay_count = run_new_method(scraper, ebay_search_url_template, home_url_ebay, 'ebay_products_new.csv', scroll_based=True, page_number_supported=True)
     print(f"New eBay product count: {new_ebay_count}")
-
-    ### Test Aliexpress (scroll-based) ###
-    home_url_aliexpress = "https://www.aliexpress.com"
-    aliexpress_search_url_template = "{base_url}/w/wholesale-{query}.html?spm=a2g0o.productlist.auto_suggest.2.41fb15faIlHSvj".format(
-        base_url=home_url_aliexpress, query=search_query.replace(" ", "-")
-    )
-    scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
-    old_aliexpress_count = run_old_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products.csv')
-    print(f"Old Aliexpress product count: {old_aliexpress_count}")
-
-    scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
-    new_aliexpress_count = run_new_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products.csv', scroll_based=True, page_number_supported=False)
-    print(f"New Aliexpress product count: {new_aliexpress_count}")
