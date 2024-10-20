@@ -43,20 +43,58 @@ class GeneralizedScraper:
         time.sleep(random.uniform(min_seconds, max_seconds))
 
     def is_captcha_present(self, soup):
-        """Detect if a CAPTCHA is present based on interaction blocking elements and structural clues."""
-        price_tags = re.search(COST_PATTERN, soup.text) # TODO THIS BETTER
-        if price_tags:
-            return False
-        return True
+        """Detect if a CAPTCHA is present based on known CAPTCHA indicators in the HTML."""
+        # Define common CAPTCHA selectors
+        captcha_selectors = [
+            {'id': re.compile(r'captcha', re.I)},
+            {'class': re.compile(r'captcha', re.I)},
+            {'id': re.compile(r'recaptcha', re.I)},
+            {'class': re.compile(r'recaptcha', re.I)},
+            {'id': re.compile(r'g-recaptcha', re.I)},
+            {'class': re.compile(r'g-recaptcha', re.I)},
+            {'id': re.compile(r'h-captcha', re.I)},
+            {'class': re.compile(r'h-captcha', re.I)},
+            {'class': re.compile(r'arkose', re.I)},  # For Arkose Labs
+            {'class': re.compile(r'cf-captcha', re.I)},  # For Cloudflare captchas
+        ]
+
+        # Check for elements matching the CAPTCHA selectors
+        for selector in captcha_selectors:
+            if soup.find(attrs=selector):
+                print("CAPTCHA detected based on HTML attributes.")
+                return True
+
+        # Check for iframes that may contain CAPTCHA challenges
+        for iframe in soup.find_all('iframe'):
+            src = iframe.get('src', '')
+            if re.search(r'captcha|recaptcha|hcaptcha', src, re.I):
+                print("CAPTCHA detected in an iframe.")
+                return True
+
+        # Optionally, check for CAPTCHA keywords in form actions or JavaScript
+        forms = soup.find_all('form', action=True)
+        for form in forms:
+            if re.search(r'captcha', form['action'], re.I):
+                print("CAPTCHA detected in form action.")
+                return True
+
+        scripts = soup.find_all('script', src=True)
+        for script in scripts:
+            if re.search(r'captcha', script['src'], re.I):
+                print("CAPTCHA detected in script source.")
+                return True
+
+        # If none of the CAPTCHA indicators are found, assume no CAPTCHA is present
+        return False
 
     def open_home_page(self, home_url):
         """Open the homepage and navigate to the search URL"""
         try:
             self.driver.get(home_url)
             self.random_delay()
-            #soup = self.extract_page_structure()
-            #if self.is_captcha_present(soup):
-                #input("Resolve Captcha and click enter button")
+            soup = self.extract_page_structure()
+            if self.is_captcha_present(soup):
+                input("Resolve Captcha and click enter button")
             return True
         except Exception as e:
             print(f"Failed to navigate to the product URL: {e}")
