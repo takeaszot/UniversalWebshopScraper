@@ -38,7 +38,7 @@ class GeneralizedScraper:
         driver = uc.Chrome(options=options)
         return driver
 
-    def random_delay(self, min_seconds=4, max_seconds=6):
+    def random_delay(self, min_seconds=1, max_seconds=1):
         """Mimic human-like random delay"""
         time.sleep(random.uniform(min_seconds, max_seconds))
 
@@ -163,14 +163,14 @@ class GeneralizedScraper:
 
                     self.store_product(product_url, image_url, price, currency, title)
 
-                    print("\n--- Detected Product Block ---")
-                    print(f"Website: {self.shopping_website}")
-                    print(f"Product URL: {product_url}")
-                    print(f"Image URL: {image_url}")
-                    print(f"Price: {price}")
-                    print(f"Currency: {currency}")
-                    print(f"Title: {title}")
-                    print("--- End of Product Block ---\n")
+                    #print("\n--- Detected Product Block ---")
+                    #print(f"Website: {self.shopping_website}")
+                    #print(f"Product URL: {product_url}")
+                    #print(f"Image URL: {image_url}")
+                    #print(f"Price: {price}")
+                    #print(f"Currency: {currency}")
+                    #print(f"Title: {title}")
+                    #print("--- End of Product Block ---\n")
 
                     self.product_count += 1
 
@@ -346,7 +346,7 @@ class GeneralizedScraper:
             print(f"Failed to find or click the 'Next' button: {e}")
         return False
 
-    def scrape_all_products(self, scroll_based=False, max_pages=5, max_scrolls=5, url_template=None,
+    def scrape_all_products(self, scroll_based=False, max_pages=25, max_scrolls=1, url_template=None,
                             page_number_supported=True):
         """Scrape all products using scrolling and pagination together when both are True."""
 
