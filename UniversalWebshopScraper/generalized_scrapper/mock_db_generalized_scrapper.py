@@ -464,7 +464,6 @@ if __name__ == "__main__":
             "Termos na jedzenie"
         ]
 
-
     }
 
     home_url_amazon = "https://www.amazon.com"

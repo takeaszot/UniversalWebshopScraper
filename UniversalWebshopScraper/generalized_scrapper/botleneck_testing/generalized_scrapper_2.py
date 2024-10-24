@@ -144,38 +144,52 @@ class GeneralizedScraper:
 
             if self.is_valid_product_block(block):
                 self.mark_block_and_children(block)
-                product_url, image_url, price, title = self.extract_product_info(block)
+                product_urls, image_urls, price, title = self.extract_product_info(block)
 
-                filtered_price = self.filter_strikethrough_prices(block, price)
+                print(f'number of product urls: {len(product_urls) if product_urls else 0}')
+                print(f'number of image urls: {len(image_urls) if image_urls else 0}')
 
-                if filtered_price:  # Only process if there is a valid price
-                    price, currency = self._get_price_currency(filtered_price)
+                product_url = product_urls[0]
+                image_url = image_urls[0]
 
-                    if product_url in self.detected_products:
-                        continue
-                    self.detected_products.add(product_url)
+                price, currency = self._get_price_currency(price)
 
-                    if image_url in self.detected_image_urls:
-                        continue
-                    self.detected_image_urls.add(image_url)  # Mark this image URL as processed
+                self.detected_products.add(product_url)
+                self.detected_image_urls.add(image_url)
 
-                    if not product_url.startswith("http"):
-                        if not product_url.startswith("/"):
-                            product_url = f"/{product_url}"
-                        product_url = f"{self.shopping_website}{product_url}"
+                self.store_product(product_url, image_url, price, currency, title)
 
-                    self.store_product(product_url, image_url, price, currency, title)
+                # just print the highest-level tag
+                print(f"Detected parent block:\n{str(block).split('>')[0]}>")
+                print("\n--- Detected Product Block ---")
+                print(f"Website: {self.shopping_website}")
+                print(f"Product URL: {product_url}")
+                print(f"Image URL: {image_url}")
+                print(f"Price: {price}")
+                print(f"Currency: {currency}")
+                print(f"Title: {title}")
+                print('other urls:')
 
-                    #print("\n--- Detected Product Block ---")
-                    #print(f"Website: {self.shopping_website}")
-                    #print(f"Product URL: {product_url}")
-                    #print(f"Image URL: {image_url}")
-                    #print(f"Price: {price}")
-                    #print(f"Currency: {currency}")
-                    #print(f"Title: {title}")
-                    #print("--- End of Product Block ---\n")
+                # Print all product URLs detected in this block
+                if product_urls:
+                    print("All product URLs detected:")
+                    for url in product_urls:
+                        print(f"{url}\n")
+                else:
+                    print("All product URLs detected: None\n")
 
-                    self.product_count += 1
+                # Print all image URLs detected in this block
+                if image_urls:
+                    print("All image URLs detected:")
+                    for url in image_urls:
+                        print(f"{url}\n")
+                else:
+                    print("All image URLs detected: None\n")
+
+                print("--- End of Product Block ---\n")
+
+                self.product_count += 1
+
 
     def filter_strikethrough_prices(self, block, price):
         """Filter out any price that is inside an element with the STRIKETHROUGH class."""
@@ -184,11 +198,10 @@ class GeneralizedScraper:
         return price
 
     def is_valid_product_block(self, block):
-        """Check if a block contains all necessary information (product URL, image URL, price, and title)."""
-        # Instead of extracting everything upfront, check key elements
-        if not block.find('a', href=True):  # Check if a product URL exists
+        """Check if a block contains all necessary information (product URL, image URL, and price)."""
+        if not self.find_product_url(block):  # Check if a product URL exists
             return False
-        if not block.find('img', src=True):  # Check if an image URL exists
+        if not self.find_image_url(block):  # Check if an image URL exists
             return False
         if not self.find_price(block):  # Check if a price exists
             return False
@@ -202,26 +215,49 @@ class GeneralizedScraper:
         title = self.find_title(block)
         return product_url, image_url, price, title
 
+    @profile
     def find_product_url(self, block):
-        """Find the product URL inside a block."""
-        product_url = block.find('a', href=True)
-        if product_url:
-            return normalize_url(self.shopping_website, product_url['href'])
+        """Find all product URLs inside a block and return the first non-duplicate one."""
+        product_urls = set()
+
+        # Find all <a> tags and gather their URLs
+        product_url_tags = block.find_all('a', href=True)
+        for product_url_tag in product_url_tags:
+            product_url = normalize_url(self.shopping_website, product_url_tag['href'])
+            product_urls.add(product_url)
+
+        # Remove already detected URLs
+        unique_product_urls = [url for url in product_urls if url not in self.detected_products]
+
+        # Return the first non-duplicate URL, if any
+        if unique_product_urls:
+            return unique_product_urls
+
         return None
 
+    @profile
     def find_image_url(self, block):
-        """Find the image URL inside a block (either img tag or inline style)."""
-        img_tag = block.find('img', src=True)
-        if img_tag:
-            return normalize_url(self.shopping_website, img_tag['src'])
+        """Find all image URLs inside a block (either img tag or inline style)."""
+        image_urls = set()
 
+        # Find all <img> tags and gather their URLs
+        img_tags = block.find_all('img', src=True)
+        for img_tag in img_tags:
+            image_url = normalize_url(self.shopping_website, img_tag['src'])
+            image_urls.add(image_url)
+
+        # Check for inline styles with 'background-image' and extract the URLs
         style = block.get('style')
         if style and 'background-image' in style:
             match = re.search(r'url\((.*?)\)', style)
             if match:
-                return normalize_url(self.shopping_website, match.group(1))
+                image_url = normalize_url(self.shopping_website, match.group(1))
+                image_urls.add(image_url)
 
-        return None
+        # Remove already detected URLs
+        unique_image_urls = [url for url in image_urls if url not in self.detected_image_urls]
+
+        return unique_image_urls
 
     def _get_max_price(self, price_tags):
         """Get the maximum price from price_tags, assuming prices with STRIKETHROUGH have been filtered out."""
@@ -244,13 +280,17 @@ class GeneralizedScraper:
         return price[0][0] + price[0][3], price[0][1] + price[0][2]
 
     def find_price(self, block):
-        """Look for price information in the block, including cases with multi-span prices."""
+        """Look for price information in the block, including cases with multi-span prices,
+           and skip prices inside elements with the 'STRIKETHROUGH' class."""
         # Find all span elements within the block
         price_spans = block.find_all('span', recursive=True)
-        price_parts = []
         full_text = ""
 
-        for span in price_spans:
+        for span in price_spans: # todo check if this works
+            # Skip any price inside an element with a 'STRIKETHROUGH' class
+            if span.find_parent(class_='STRIKETHROUGH'):
+                continue
+
             text = span.get_text(strip=True)
             full_text += text  # Combine all text content from spans into a single string
 
@@ -282,13 +322,13 @@ class GeneralizedScraper:
 
     def mark_block_and_children(self, block):
         """Mark the block and all its children as processed."""
-        self.marked_blocks.append(block)
+        self.marked_blocks.add(block)
         for parent in block.parents:
             if parent not in self.marked_blocks:
-                self.marked_blocks.append(parent)
+                self.marked_blocks.add(parent)
         for child in block.find_all(recursive=True):
             if child not in self.marked_blocks:
-                self.marked_blocks.append(child)
+                self.marked_blocks.add(child)
 
     def save_to_csv(self, save_path=None):
         """Save the stored products to a CSV file inside a directory for each e-commerce website."""
@@ -344,7 +384,7 @@ class GeneralizedScraper:
         print(f"Scrolled {i + 1} times")
 
     @profile
-    def scrape_all_products(self, scroll_based=False, max_pages=5, max_scrolls=1, url_template=None,
+    def scrape_all_products(self, scroll_based=False, max_pages=1, max_scrolls=1, url_template=None,
                             page_number_supported=True):
         """Scrape all products using scrolling and pagination together when both are True."""
 
@@ -385,7 +425,7 @@ if __name__ == "__main__":
         soup = scraper.extract_page_structure()
         scraper.detect_product_blocks(soup)
         old_method_count = scraper.product_count
-        scraper.save_to_csv(csv_file_name)  # Save to the appropriate shop folder
+        #scraper.save_to_csv(csv_file_name)  # Save to the appropriate shop folder
         scraper.close_driver()
         return old_method_count
 
@@ -395,7 +435,7 @@ if __name__ == "__main__":
         scraper.open_search_url(search_url_template)
         scraper.scrape_all_products(scroll_based=scroll_based, url_template=search_url_template, page_number_supported=page_number_supported)
         new_method_count = scraper.product_count
-        scraper.save_to_csv(csv_file_name)  # Save to the appropriate shop folder
+        #scraper.save_to_csv(csv_file_name)  # Save to the appropriate shop folder
         scraper.close_driver()
         return new_method_count
 
