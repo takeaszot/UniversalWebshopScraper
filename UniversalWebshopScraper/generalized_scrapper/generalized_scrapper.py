@@ -282,13 +282,13 @@ class GeneralizedScraper:
 
     def mark_block_and_children(self, block):
         """Mark the block and all its children as processed."""
-        self.marked_blocks.append(block)
+        self.marked_blocks.add(block)
         for parent in block.parents:
             if parent not in self.marked_blocks:
-                self.marked_blocks.append(parent)
+                self.marked_blocks.add(parent)
         for child in block.find_all(recursive=True):
             if child not in self.marked_blocks:
-                self.marked_blocks.append(child)
+                self.marked_blocks.add(child)
 
     def save_to_csv(self, save_path=None):
         """Save the stored products to a CSV file inside a directory for each e-commerce website."""

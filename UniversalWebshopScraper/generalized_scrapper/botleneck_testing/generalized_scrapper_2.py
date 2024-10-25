@@ -26,6 +26,7 @@ class GeneralizedScraper:
         self.marked_blocks = set()
         self.detected_products = set()  # Set to store detected products
         self.detected_image_urls = SortedSet()  # Ordered set for image URLs
+        self.parent_blocks = set()
         self.shopping_website = shopping_website
         self.product_count = 0
         self.stored_products = []  # List to store gathered products (dict format)
@@ -154,10 +155,16 @@ class GeneralizedScraper:
 
                 price, currency = self._get_price_currency(price)
 
-                self.detected_products.add(product_url)
-                self.detected_image_urls.add(image_url)
+                # Add all found product URLs to the detected_products set
+                for product_url in product_urls:
+                    self.detected_products.add(product_url)
+
+                # Add all found image URLs to the detected_image_urls set
+                for image_url in image_urls:
+                    self.detected_image_urls.add(image_url)
 
                 self.store_product(product_url, image_url, price, currency, title)
+                self.parent_blocks.add(str(block).split('>')[0])
 
                 # just print the highest-level tag
                 print(f"Detected parent block:\n{str(block).split('>')[0]}>")
@@ -205,9 +212,11 @@ class GeneralizedScraper:
             return False
         if not self.find_price(block):  # Check if a price exists
             return False
+        if not self.find_title(block):
+            return False
         return True
 
-    def extract_product_info(self, block):
+    def extract_product_info(self, block):  # we are doing this 2 times!!! TODO
         """Extract the product URL, image URL, price, and title from a block."""
         product_url = self.find_product_url(block)
         image_url = self.find_image_url(block)
@@ -244,7 +253,8 @@ class GeneralizedScraper:
         img_tags = block.find_all('img', src=True)
         for img_tag in img_tags:
             image_url = normalize_url(self.shopping_website, img_tag['src'])
-            image_urls.add(image_url)
+            if image_url:  # Ensure no None values are added
+                image_urls.add(image_url)
 
         # Check for inline styles with 'background-image' and extract the URLs
         style = block.get('style')
@@ -252,12 +262,13 @@ class GeneralizedScraper:
             match = re.search(r'url\((.*?)\)', style)
             if match:
                 image_url = normalize_url(self.shopping_website, match.group(1))
-                image_urls.add(image_url)
+                if image_url:  # Ensure no None values are added
+                    image_urls.add(image_url)
 
         # Remove already detected URLs
         unique_image_urls = [url for url in image_urls if url not in self.detected_image_urls]
 
-        return unique_image_urls
+        return unique_image_urls or []
 
     def _get_max_price(self, price_tags):
         """Get the maximum price from price_tags, assuming prices with STRIKETHROUGH have been filtered out."""
@@ -326,7 +337,7 @@ class GeneralizedScraper:
         for parent in block.parents:
             if parent not in self.marked_blocks:
                 self.marked_blocks.add(parent)
-        for child in block.find_all(recursive=True):
+        for child in block.find_all(recursive=True):  # can remove this TODO check
             if child not in self.marked_blocks:
                 self.marked_blocks.add(child)
 
@@ -384,7 +395,7 @@ class GeneralizedScraper:
         print(f"Scrolled {i + 1} times")
 
     @profile
-    def scrape_all_products(self, scroll_based=False, max_pages=1, max_scrolls=1, url_template=None,
+    def scrape_all_products(self, scroll_based=False, max_pages=3, max_scrolls=1, url_template=None,
                             page_number_supported=True):
         """Scrape all products using scrolling and pagination together when both are True."""
 
@@ -415,19 +426,13 @@ class GeneralizedScraper:
             else:
                 break  # Stop after scrolling if pagination is not supported
 
+        # print all patent blocks
+        print('parent blocks:')
+        for block in self.parent_blocks:
+            print(block)
+
 if __name__ == "__main__":
     search_query = "tv"
-
-    def run_old_method(scraper, search_url_template, base_url, csv_file_name):
-        """Run the old method without scrolling or pagination and save the results."""
-        scraper.open_home_page(base_url)
-        scraper.open_search_url(search_url_template)
-        soup = scraper.extract_page_structure()
-        scraper.detect_product_blocks(soup)
-        old_method_count = scraper.product_count
-        #scraper.save_to_csv(csv_file_name)  # Save to the appropriate shop folder
-        scraper.close_driver()
-        return old_method_count
 
     def run_new_method(scraper, search_url_template, base_url, csv_file_name, scroll_based=False, page_number_supported=True):
         """Run the new method with scrolling or pagination and save the results."""
@@ -435,55 +440,14 @@ if __name__ == "__main__":
         scraper.open_search_url(search_url_template)
         scraper.scrape_all_products(scroll_based=scroll_based, url_template=search_url_template, page_number_supported=page_number_supported)
         new_method_count = scraper.product_count
-        #scraper.save_to_csv(csv_file_name)  # Save to the appropriate shop folder
+        # scraper.save_to_csv(csv_file_name)  # Save to the appropriate shop folder
         scraper.close_driver()
         return new_method_count
-
-    ### Test Aliexpress (scroll-based) ###
-    home_url_aliexpress = "https://www.aliexpress.com"
-    aliexpress_search_url_template = "{home_url}/w/wholesale-{query}.html?page={{page_number}}".format(home_url=home_url_aliexpress, query=search_query.replace(" ", "+"))
-
-    scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
-    old_aliexpress_count = run_old_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products.csv')
-    print(f"Old Aliexpress product count: {old_aliexpress_count}")
-
-    scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
-    new_aliexpress_count = run_new_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products_new.csv', scroll_based=True, page_number_supported=True)
-    print(f"New Aliexpress product count: {new_aliexpress_count}")
-
-    ### Test Temu (scroll-based) ###
-    home_url_temu = "https://www.temu.com"
-    temu_search_url_template = "{base_url}/search_result.html?search_key={query}&search_method=user".format(
-        base_url=home_url_temu, query=search_query.replace(" ", "+"))
-
-    scraper = GeneralizedScraper(shopping_website=home_url_temu)
-    old_temu_count = run_old_method(scraper, temu_search_url_template, home_url_temu, 'temu_products.csv')
-    print(f"Old Temu product count: {old_temu_count}")
-
-    scraper = GeneralizedScraper(shopping_website=home_url_temu)
-    new_temu_count = run_new_method(scraper, temu_search_url_template, home_url_temu, 'temu_products_new.csv', scroll_based=True, page_number_supported=False)
-    print(f"New Temu product count: {new_temu_count}")
-
-    ### Test Amazon (pagination-based) ###
-    home_url_amazon = "https://www.amazon.com"
-    amazon_search_url_template = "{base_url}/s?k={query}&page={{page_number}}".format(base_url=home_url_amazon, query=search_query.replace(" ", "+"))
-
-    scraper = GeneralizedScraper(shopping_website=home_url_amazon)
-    old_amazon_count = run_old_method(scraper, amazon_search_url_template, home_url_amazon, 'amazon_products.csv')
-    print(f"Old Amazon product count: {old_amazon_count}")
-
-    scraper = GeneralizedScraper(shopping_website=home_url_amazon)
-    new_amazon_count = run_new_method(scraper, amazon_search_url_template, home_url_amazon, 'amazon_products_new.csv', scroll_based=True, page_number_supported=True)
-    print(f"New Amazon product count: {new_amazon_count}")
 
     ### Test Allegro (pagination-based) ###
     home_url_allegro = "https://www.allegro.pl"
     # Corrected URL template with double curly braces for page_number
     allegro_search_url_template = f'{home_url_allegro}/listing?string={search_query.replace(" ", "+")}&p={{page_number}}'
-
-    scraper = GeneralizedScraper(shopping_website=home_url_allegro)
-    old_allegro_count = run_old_method(scraper, allegro_search_url_template, home_url_allegro, 'allegro_products.csv')
-    print(f"Old Allegro product count: {old_allegro_count}")
 
     scraper = GeneralizedScraper(shopping_website=home_url_allegro)
     new_allegro_count = run_new_method(scraper, allegro_search_url_template, home_url_allegro,
@@ -496,8 +460,49 @@ if __name__ == "__main__":
         base_url=home_url_ebay, query=search_query.replace(" ", "+"))
 
     scraper = GeneralizedScraper(shopping_website=home_url_ebay)
-    old_ebay_count = run_old_method(scraper, ebay_search_url_template, home_url_ebay, 'ebay_products.csv')
-    print(f"Old eBay product count: {old_ebay_count}")
+    new_ebay_count = run_new_method(scraper, ebay_search_url_template, home_url_ebay, 'ebay_products_new.csv', scroll_based=True, page_number_supported=True)
+    print(f"New eBay product count: {new_ebay_count}")
+
+
+    ### Test Aliexpress (scroll-based) ###
+    home_url_aliexpress = "https://www.aliexpress.com"
+    aliexpress_search_url_template = "{home_url}/w/wholesale-{query}.html?page={{page_number}}".format(home_url=home_url_aliexpress, query=search_query.replace(" ", "+"))
+
+    scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
+    new_aliexpress_count = run_new_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products_new.csv', scroll_based=True, page_number_supported=True)
+    print(f"New Aliexpress product count: {new_aliexpress_count}")
+
+    ### Test Temu (scroll-based) ###
+    home_url_temu = "https://www.temu.com"
+    temu_search_url_template = "{base_url}/search_result.html?search_key={query}&search_method=user".format(
+        base_url=home_url_temu, query=search_query.replace(" ", "+"))
+
+    scraper = GeneralizedScraper(shopping_website=home_url_temu)
+    new_temu_count = run_new_method(scraper, temu_search_url_template, home_url_temu, 'temu_products_new.csv', scroll_based=True, page_number_supported=False)
+    print(f"New Temu product count: {new_temu_count}")
+
+    ### Test Amazon (pagination-based) ###
+    home_url_amazon = "https://www.amazon.com"
+    amazon_search_url_template = "{base_url}/s?k={query}&page={{page_number}}".format(base_url=home_url_amazon, query=search_query.replace(" ", "+"))
+
+    scraper = GeneralizedScraper(shopping_website=home_url_amazon)
+    new_amazon_count = run_new_method(scraper, amazon_search_url_template, home_url_amazon, 'amazon_products_new.csv', scroll_based=True, page_number_supported=True)
+    print(f"New Amazon product count: {new_amazon_count}")
+
+    ### Test Allegro (pagination-based) ###
+    home_url_allegro = "https://www.allegro.pl"
+    # Corrected URL template with double curly braces for page_number
+    allegro_search_url_template = f'{home_url_allegro}/listing?string={search_query.replace(" ", "+")}&p={{page_number}}'
+
+    scraper = GeneralizedScraper(shopping_website=home_url_allegro)
+    new_allegro_count = run_new_method(scraper, allegro_search_url_template, home_url_allegro,
+                                       'allegro_products_new.csv', scroll_based=True, page_number_supported=True)
+    print(f"New Allegro product count: {new_allegro_count}")
+
+    ### Test eBay (pagination-based) ###
+    home_url_ebay = "https://www.ebay.com"
+    ebay_search_url_template = "{base_url}/sch/i.html?_nkw={query}&_pgn={{page_number}}".format(
+        base_url=home_url_ebay, query=search_query.replace(" ", "+"))
 
     scraper = GeneralizedScraper(shopping_website=home_url_ebay)
     new_ebay_count = run_new_method(scraper, ebay_search_url_template, home_url_ebay, 'ebay_products_new.csv', scroll_based=True, page_number_supported=True)
