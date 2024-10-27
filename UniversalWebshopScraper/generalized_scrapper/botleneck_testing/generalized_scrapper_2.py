@@ -155,12 +155,11 @@ class GeneralizedScraper:
 
         # Step 3: Iterate through each block to identify and process those containing product data.
         for block in blocks:
-
             # Skip blocks that have already been processed to prevent redundant work.
             if block in self.marked_blocks:
                 continue
 
-                # Step 4: Try to extract product information from the current block.
+            # Step 4: Try to extract product information from the current block.
             # This includes URLs, images, price, and title. If any information is missing, we skip this block.
             product_info = self.extract_product_info(block)
             if not product_info:
@@ -332,14 +331,10 @@ class GeneralizedScraper:
         """Look for price information in the block, including cases with multi-span prices,
            and skip prices inside elements with the 'STRIKETHROUGH' class."""
         # Find all span elements within the block
-        price_spans = block.find_all('span', recursive=True)
+        price_spans = block.find_all(['div', 'li', 'article', 'span', 'ul'], recursive=True)
         full_text = ""
 
-        for span in price_spans: # todo check if this works
-            # Skip any price inside an element with a 'STRIKETHROUGH' class
-            if span.find_parent(class_='STRIKETHROUGH'):
-                continue
-
+        for span in price_spans:
             text = span.get_text(strip=True)
             full_text += text  # Combine all text content from spans into a single string
 
