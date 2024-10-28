@@ -154,7 +154,7 @@ COST_PATTERN = f"{PRICE_PATTERN}\s*{CURRENCY_PATTER}|{CURRENCY_PATTER}\s*{PRICE_
 class GeneralizedScraper:
     def __init__(self, shopping_website=None):
         self.driver = self.initialize_driver()
-        self.marked_blocks = set()
+        self.marked_blocks = {}
         self.detected_products = set()  # Set to store detected products
         self.detected_image_urls = SortedSet()  # Ordered set for image URLs
         self.parent_blocks = []  # change to set later, for now we use list to store all parent blocks to know how many we have
@@ -281,10 +281,13 @@ class GeneralizedScraper:
         # Sorting by the number of parent elements allows us to process smaller, more specific blocks before larger containers.
         blocks.sort(key=lambda x: len(list(x.parents)), reverse=True)
 
+        # how many block
+        print(f"Number of blocks: {len(blocks)}")
+
         # Step 3: Iterate through each block to identify and process those containing product data.
         for block in blocks:
             # Skip blocks that have already been processed to prevent redundant work.
-            if block in self.marked_blocks:
+            if self.marked_blocks.get(block):
                 continue
 
             # Step 4: Try to extract product information from the current block.
@@ -496,10 +499,13 @@ class GeneralizedScraper:
 
     @profile
     def mark_and_block(self, block):
-        """Mark the block and all its children as processed."""
-        self.marked_blocks.add(block)
+        """Mark the block and its parents with metadata to avoid reprocessing."""
+        # Store the block with any required metadata; for simplicity, we store a boolean here
+        self.marked_blocks[block] = True
         for parent in block.parents:
-            self.marked_blocks.add(parent)
+            if parent in self.marked_blocks:
+                break
+            self.marked_blocks[parent] = True
 
     def save_to_csv(self, save_path=None):
         """Save the stored products to a CSV file inside a directory for each e-commerce website."""
@@ -555,7 +561,7 @@ class GeneralizedScraper:
         print(f"Scrolled {i + 1} times")
 
     @profile
-    def scrape_all_products(self, scroll_based=False, max_pages=2, max_scrolls=1, url_template=None,
+    def scrape_all_products(self, scroll_based=False, max_pages=5, max_scrolls=1, url_template=None,
                             page_number_supported=True):
         """Scrape all products using scrolling and pagination together when both are True."""
 
