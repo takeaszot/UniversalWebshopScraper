@@ -9,6 +9,7 @@ import os
 import cProfile
 from line_profiler import profile
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 
 from urllib.parse import urljoin, urlparse, parse_qs, urlencode, urlunparse
 from functools import wraps
@@ -154,8 +155,9 @@ COST_PATTERN = f"{PRICE_PATTERN}\s*{CURRENCY_PATTER}|{CURRENCY_PATTER}\s*{PRICE_
 class GeneralizedScraper:
     def __init__(self, shopping_website=None):
         self.driver = self.initialize_driver()
-        self.marked_blocks = {}
+        self.marked_blocks = set()
         self.detected_products = set()  # Set to store detected products
+        self.detected_titles = set()  # Set to store detected titles
         self.detected_image_urls = SortedSet()  # Ordered set for image URLs
         self.parent_blocks = []  # change to set later, for now we use list to store all parent blocks to know how many we have
         self.shopping_website = shopping_website
@@ -287,7 +289,7 @@ class GeneralizedScraper:
         # Step 3: Iterate through each block to identify and process those containing product data.
         for block in blocks:
             # Skip blocks that have already been processed to prevent redundant work.
-            if self.marked_blocks.get(block):
+            if id(block) in self.marked_blocks:
                 continue
 
             # Step 4: Try to extract product information from the current block.
@@ -304,8 +306,8 @@ class GeneralizedScraper:
             self.mark_and_block(block)
 
             # Step 6: Output basic information about detected products for debugging purposes.
-            print(f'number of product urls: {len(product_urls) if product_urls else 0}')
-            print(f'number of image urls: {len(image_urls) if image_urls else 0}')
+            #print(f'number of product urls: {len(product_urls) if product_urls else 0}')
+            #print(f'number of image urls: {len(image_urls) if image_urls else 0}')
 
             # Step 7: Extract the main product URL, image URL, price, and currency.
             # We assume the first URL and image in the list are the main ones for the product.
@@ -329,7 +331,7 @@ class GeneralizedScraper:
 
             # Step 11: Print detected product details for debugging and monitoring.
             # These prints help verify that scraping is working as intended.
-            print(f"Detected parent block:\n{str(block).split('>')[0]}>")
+            '''print(f"Detected parent block:\n{str(block).split('>')[0]}>")
             print("\n--- Detected Product Block ---")
             print(f"Website: {self.shopping_website}")
             print(f"Product URL: {product_url}")
@@ -349,7 +351,7 @@ class GeneralizedScraper:
             for url in image_urls:
                 print(f"{url}\n")
 
-            print("--- End of Product Block ---\n")
+            print("--- End of Product Block ---\n")'''
 
             # Step 12: Increment the product count after successfully processing a product block.
             self.product_count += 1
@@ -461,17 +463,11 @@ class GeneralizedScraper:
 
     @profile
     def find_price(self, block):
-        """Look for price information in the block, including cases with multi-span prices,
-           and skip prices inside elements with the 'STRIKETHROUGH' class."""
-        # Find all span elements within the block
-        price_spans = block.find_all(['div', 'li', 'article', 'span', 'ul'], recursive=True)
-        full_text = ""
+        """Look for price information in the block, including cases with multi-span prices."""
+        # Get all text within the block in one call
+        full_text = block.get_text(strip=True)
 
-        for span in price_spans:
-            text = span.get_text(strip=True)
-            full_text += text  # Combine all text content from spans into a single string
-
-        # Now apply your COST_PATTERN to the combined text
+        # Apply the COST_PATTERN to the combined text
         price_pattern = re.compile(COST_PATTERN)
         price_tags = re.findall(price_pattern, full_text)
 
@@ -482,6 +478,7 @@ class GeneralizedScraper:
         return None
 
     def find_title(self, block):
+        # TODO
         """Look for a string that is likely the product title."""
         title_tags = block.find_all(['h1', 'h2', 'h3', 'span', 'a', 'div'])
 
@@ -499,13 +496,12 @@ class GeneralizedScraper:
 
     @profile
     def mark_and_block(self, block):
-        """Mark the block and its parents with metadata to avoid reprocessing."""
-        # Store the block with any required metadata; for simplicity, we store a boolean here
-        self.marked_blocks[block] = True
+        """Mark the block and its parents to avoid reprocessing."""
+        self.marked_blocks.add(id(block))
         for parent in block.parents:
-            if parent in self.marked_blocks:
+            if id(parent) in self.marked_blocks:
                 break
-            self.marked_blocks[parent] = True
+            self.marked_blocks.add(id(parent))
 
     def save_to_csv(self, save_path=None):
         """Save the stored products to a CSV file inside a directory for each e-commerce website."""
@@ -560,8 +556,13 @@ class GeneralizedScraper:
 
         print(f"Scrolled {i + 1} times")
 
+    # detect of not interesting blocks
+    def trash_detection(self, block):
+        # TODO here we need to detect not interesting blocks
+        pass
+
     @profile
-    def scrape_all_products(self, scroll_based=False, max_pages=5, max_scrolls=1, url_template=None,
+    def scrape_all_products(self, scroll_based=False, max_pages=2, max_scrolls=1, url_template=None,
                             page_number_supported=True):
         """Scrape all products using scrolling and pagination together when both are True."""
 
@@ -581,6 +582,11 @@ class GeneralizedScraper:
 
             # Extract product blocks after scrolling
             soup = self.extract_page_structure()
+
+            # we detect duplicated urls and titles to avoid trash that is duplicated (like 'promotion' or 'discount')
+            if page_count == 1:
+                self.trash_detection(soup)
+
             self.detect_product_blocks(soup)
 
             # how many marked blocks we have
@@ -605,7 +611,9 @@ class GeneralizedScraper:
             print(f"{block}: detected {count} times")
         print('end of parent blocks')
 
+
 if __name__ == "__main__":
+    # PYTHONPATH=. kernprof -l -v UniversalWebshopScraper/generalized_scrapper/botleneck_testing/generalized_scrapper_2.py
     search_query = "tv"
 
     def run_new_method(scraper, search_url_template, base_url, csv_file_name, scroll_based=False, page_number_supported=True):
