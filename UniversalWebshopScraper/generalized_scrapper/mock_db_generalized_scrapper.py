@@ -515,6 +515,8 @@ if __name__ == "__main__":
             # Save collected products to a CSV for this category
             csv_filename = os.path.join(category_save_path, f"{site_name}_{category}_scraped_products.csv")
             scraper.save_to_csv(csv_filename)
+            # after saving we should clear the products list
+            scraper.stored_products = []
 
         scraper.close_driver()
         print('*' * 69)

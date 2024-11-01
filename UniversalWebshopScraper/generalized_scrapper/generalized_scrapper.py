@@ -22,21 +22,29 @@ PRICE_PATTERN = r"(\d+(?:[.,]\d{3})*(?:[.,]\d\d))"
 COST_PATTERN = f"{PRICE_PATTERN}\s*{CURRENCY_PATTER}|{CURRENCY_PATTER}\s*{PRICE_PATTERN}"
 
 class GeneralizedScraper:
+    """
+    Initialize the GeneralizedScraper object with necessary attributes.
+
+    Args:
+        shopping_website (str): The URL of the shopping website.
+    """
     def __init__(self, shopping_website=None):
         self.driver = self.initialize_driver()
-        self.marked_blocks = set()
+        self.marked_blocks = set()  # Set to store marked blocks
         self.detected_products = set()  # Set to store detected products
         self.wrong_titles = set()  # Set to store detected titles
         self.detected_image_urls = SortedSet()  # Ordered set for image URLs
         self.parent_blocks = []  # change to set later, for now we use list to store all parent blocks to know how many we have
-        self.shopping_website = shopping_website
-        self.product_count = 0
+        self.shopping_website = shopping_website  # The URL of the shopping website
+        self.product_count = 0  # Counter for the number of products detected
         self.stored_products = []  # List to store gathered products (dict format)
 
     def initialize_driver(self):
-        """Initialize the Chrome driver with the necessary options.
-        this helps to avoid CAPTCHA and other bot detection mechanisms.
-        idk how this need to be done on mac or linux
+        """
+        Initialize the Chrome driver with necessary options for avoiding CAPTCHA detection.
+
+        Returns:
+            driver: The initialized Chrome driver with customized options.
         """
         options = uc.ChromeOptions()
         user_data_dir = r"C:\Users\<YourUsername>\AppData\Local\Google\Chrome\User Data"
@@ -47,12 +55,26 @@ class GeneralizedScraper:
         driver = uc.Chrome(options=options)
         return driver
 
-    def random_delay(self, min_seconds=2, max_seconds=4):
-        """Mimic human-like random delay"""
+    def random_delay(self, min_seconds=3, max_seconds=5):
+        """
+        Mimic human-like random delay.
+
+        Args:
+            min_seconds (int): Minimum delay time in seconds.
+            max_seconds (int): Maximum delay time in seconds.
+        """
         time.sleep(random.uniform(min_seconds, max_seconds))
 
     def is_captcha_present(self, soup):
-        """Detect if a CAPTCHA is present based on known CAPTCHA indicators in the HTML."""
+        """
+        Detect if a CAPTCHA is present based on known CAPTCHA indicators in the HTML.
+
+        Args:
+            soup (BeautifulSoup): Parsed HTML of the page.
+
+        Returns:
+            bool: True if CAPTCHA is detected, False otherwise.
+        """
         # TODO maybe this need to be improved
         # Define common CAPTCHA selectors
         captcha_selectors = [
@@ -98,20 +120,36 @@ class GeneralizedScraper:
         return False
 
     def open_home_page(self, home_url):
-        """Open the homepage and navigate to the search URL"""
+        """
+        Open the homepage and handle CAPTCHA if detected.
+
+        Args:
+            home_url (str): The URL of the homepage.
+
+        Returns:
+            bool: True if the page opened successfully, False otherwise.
+        """
         try:
             self.driver.get(home_url)
             self.random_delay()
-            #soup = self.extract_page_structure()
-            #if self.is_captcha_present(soup):
-            #    input("Resolve Captcha and click enter button")
-            #return True
+            soup = self.extract_page_structure()
+            if self.is_captcha_present(soup):
+                input("Resolve Captcha and click enter button")
+            return True
         except Exception as e:
             print(f"Failed to navigate to the product URL: {e}")
             return False
 
     def open_search_url(self, search_url):
-        """Open the search URL and resolve CAPTCHA if detected."""
+        """
+        Open the search URL and handle CAPTCHA if detected.
+
+        Args:
+            search_url (str): The URL for the search page.
+
+        Returns:
+            bool: True if the page opened successfully, False otherwise.
+        """
         try:
             self.driver.get(search_url.format(page_number=1))
             self.random_delay()
@@ -124,12 +162,26 @@ class GeneralizedScraper:
             return
 
     def extract_page_structure(self):
-        """Extract the page's HTML content using BeautifulSoup"""
+        """
+        Extract the page's HTML content using BeautifulSoup.
+
+        Returns:
+            BeautifulSoup: Parsed HTML content of the page.
+        """
         soup = BeautifulSoup(self.driver.page_source, 'html.parser')
         return soup
 
     def store_product(self, product_url, image_url, price, currency, title):
-        """Store the product information in a list of dictionaries."""
+        """
+        Store the product information in a list of dictionaries.
+
+        Args:
+            product_url (str): URL of the product.
+            image_url (str): URL of the product image.
+            price (str): Price of the product.
+            currency (str): Currency of the product price.
+            title (str): Title of the product.
+        """
         self.stored_products.append({
             "Website": self.shopping_website,
             "Product URL": product_url,
@@ -141,8 +193,12 @@ class GeneralizedScraper:
 
     @profile
     def detect_product_blocks(self, soup):
-        """Detect product blocks by finding the smallest subtrees that fulfill the requirements,
-        skipping elements that are inside STRIKETHROUGH class to avoid irrelevant items."""
+        """
+        Detect product blocks on the page by identifying the smallest subtrees with product information.
+
+        Args:
+            soup (BeautifulSoup): Parsed HTML of the page.
+        """
 
         # Step 1: Identify all potential blocks that might contain product information.
         # We look for common HTML tags used to wrap products on e-commerce websites.
@@ -227,7 +283,15 @@ class GeneralizedScraper:
 
     @profile
     def extract_product_info(self, block):
-        """Extract product information from a block if all necessary elements are present."""
+        """
+        Extract product information from a block.
+
+        Args:
+            block (Tag): The HTML block to extract product information from.
+
+        Returns:
+            tuple: A tuple containing URLs, image URLs, price, and title, or None if any are missing.
+        """
         price = self.find_price(block)
 
         if not price:
@@ -252,7 +316,15 @@ class GeneralizedScraper:
 
     @profile
     def find_product_url(self, block):
-        """Find all product URLs inside a block and return the first non-duplicate one."""
+        """
+        Find all product URLs inside a block.
+
+        Args:
+            block (Tag): The HTML block to search for product URLs.
+
+        Returns:
+            list: A list of unique product URLs not already detected, or None if empty.
+        """
         product_urls = set()
 
         # Find all <a> tags and gather their URLs
@@ -272,8 +344,15 @@ class GeneralizedScraper:
 
     @profile
     def find_image_url(self, block):
-        # TODO check if this need to be done better
-        """Find all image URLs inside a block by checking multiple possible attributes and inline styles."""
+        """
+        Find all image URLs inside a block.
+
+        Args:
+            block (Tag): The HTML block to search for image URLs.
+
+        Returns:
+            list: A list of unique image URLs not already detected.
+        """
         image_urls = set()
 
         # List of possible attributes for image sources in <img> and <source> tags
@@ -322,6 +401,12 @@ class GeneralizedScraper:
     def _get_max_price(self, price_tags):
         """Get the maximum price from price_tags, assuming prices with STRIKETHROUGH have been filtered out.
         we get max price as sometimes there are small prices with number of rates!!! idk how to get this when we got full 'block' with only rates and without price
+
+        Args:
+            price_tags (list): List of price strings.
+
+        Returns:
+            str: The maximum price found in the price tags.
         """
         max_price_tag = price_tags[0]
         max_price = price_tags[0][0] if price_tags[0][0] else price_tags[0][3]
@@ -338,12 +423,29 @@ class GeneralizedScraper:
         return max_price_tag
 
     def _get_price_currency(self, full_price):
+        """
+        Extract price and currency from a string.
+
+        Args:
+            full_price (str): The combined price and currency string.
+
+        Returns:
+            tuple: A tuple of price and currency.
+        """
         price = re.findall(COST_PATTERN, full_price)
         return price[0][0] + price[0][3], price[0][1] + price[0][2]
 
     @profile
     def find_price(self, block):
-        """Look for price information in the block, including cases with multi-span prices."""
+        """
+        Find price information in a block.
+
+        Args:
+            block (Tag): The HTML block to search for price information.
+
+        Returns:
+            str: The maximum price found, or None if no price is found.
+        """
         # Get all text within the block in one call
         full_text = block.get_text(strip=True)
 
@@ -360,8 +462,13 @@ class GeneralizedScraper:
     @profile
     def find_title(self, block):
         """
-        Look for a string that is likely the product title,
-        avoiding any strings found in `self.wrong_titles`.
+        Find the most likely product title in a block, avoiding known "trash" strings.
+
+        Args:
+            block (Tag): The HTML block to search for the product title.
+
+        Returns:
+            str: The likely product title, or None if no valid title is found.
         """
         title_tags = block.find_all(['h1', 'h2', 'h3', 'span', 'a', 'div'])
 
@@ -383,7 +490,12 @@ class GeneralizedScraper:
 
     @profile
     def mark_and_block(self, block):
-        """Mark the block and its parents to avoid reprocessing."""
+        """
+        Mark a block and its parent elements to avoid reprocessing.
+
+        Args:
+            block (Tag): The HTML block to mark as processed.
+        """
         self.marked_blocks.add(id(block))
         for parent in block.parents:
             if id(parent) in self.marked_blocks:
@@ -391,7 +503,12 @@ class GeneralizedScraper:
             self.marked_blocks.add(id(parent))
 
     def save_to_csv(self, save_path=None):
-        """Save the stored products to a CSV file inside a directory for each e-commerce website."""
+        """
+        Save the stored products to a CSV file.
+
+        Args:
+            save_path (str): The file path to save the CSV file.
+        """
         if self.stored_products:
             # Extract website name from the URL for folder naming
             website_name = self.shopping_website.replace("https://", "").replace("www.", "").split('.')[0]
@@ -416,14 +533,22 @@ class GeneralizedScraper:
             print("No products to save.")
 
     def close_driver(self):
-        """Close the browser driver"""
+        """
+        Close the browser driver and print the count of detected products.
+        """
         print("Closing the browser driver...")
         print(f"Detected {self.product_count} products.")
         if self.driver:
             self.driver.quit()
 
     def scroll_to_bottom(self, max_scrolls=10, scroll_pause_time=1):
-        """Scroll down the page a set number of times to load more products."""
+        """
+        Scroll down the page a set number of times to load more products.
+
+        Args:
+            max_scrolls (int): Maximum number of scrolls.
+            scroll_pause_time (int): Pause time between scrolls in seconds.
+        """
 
         last_height = self.driver.execute_script("return document.body.scrollHeight")
 
@@ -441,13 +566,15 @@ class GeneralizedScraper:
 
             last_height = new_height
 
-        print(f"Scrolled {i + 1} times")
+        # print(f"Scrolled {i + 1} times")
 
     # detect of not interesting blocks
     def trash_detection(self, soup):
         """
-        Detect strings that are not relevant by collecting duplicate strings
-        across different blocks on the first page and adding them to `self.wrong_titles`.
+        Detect irrelevant strings by collecting duplicate strings across blocks on the first page.
+
+        Args:
+            soup (BeautifulSoup): Parsed HTML of the page.
         """
         # Dictionary to store counts of unique strings across blocks
         string_occurrences = defaultdict(int)
@@ -476,9 +603,18 @@ class GeneralizedScraper:
         #    print(title)
 
     @profile
-    def scrape_all_products(self, scroll_based=False, max_pages=2, max_scrolls=1, url_template=None,
+    def scrape_all_products(self, scroll_based=False, max_pages=20, max_scrolls=1, url_template=None,
                             page_number_supported=True):
-        """Scrape all products using scrolling and pagination together when both are True."""
+        """
+        Scrape all products using pagination and scrolling if enabled.
+
+        Args:
+            scroll_based (bool): Whether to use scrolling.
+            max_pages (int): Maximum number of pages to scrape.
+            max_scrolls (int): Maximum scrolls per page.
+            url_template (str): Template URL with page number placeholder.
+            page_number_supported (bool): Whether pagination is supported.
+        """
 
         page_count = 1
         while page_count <= max_pages:
@@ -504,7 +640,7 @@ class GeneralizedScraper:
             self.detect_product_blocks(soup)
 
             # how many marked blocks we have
-            print(f"Number of marked blocks: {len(self.marked_blocks)}")
+            # print(f"Number of marked blocks: {len(self.marked_blocks)}")
 
             # clear marked blocks
             self.marked_blocks.clear()
@@ -515,8 +651,12 @@ class GeneralizedScraper:
             else:
                 break  # Stop after scrolling if pagination is not supported
 
+        # clear all trash titles after scraping all products on all pages
+        self.wrong_titles.clear()
+
 
 if __name__ == "__main__":
+    # for speed testing use this command
     # PYTHONPATH=. kernprof -l -v UniversalWebshopScraper/generalized_scrapper/botleneck_testing/generalized_scrapper_2.py
     search_query = "tv"
 
