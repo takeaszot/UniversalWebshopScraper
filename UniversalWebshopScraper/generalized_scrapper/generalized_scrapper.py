@@ -8,6 +8,7 @@ import pandas as pd
 import os
 import cProfile
 from line_profiler import profile
+from collections import defaultdict
 
 from UniversalWebshopScraper.generalized_scrapper.functions import detect_captcha_detector, normalize_price, normalize_url
 
@@ -15,7 +16,7 @@ from UniversalWebshopScraper.generalized_scrapper.functions import detect_captch
 
 
 """
-
+# Define the patterns for detecting prices and currencies should work for all currencies and prices with or without commas
 CURRENCY_PATTER = r"(\$|€|£|zł|PLN|USD|GBP|JPY|AUD)"
 PRICE_PATTERN = r"(\d+(?:[.,]\d{3})*(?:[.,]\d\d))"
 COST_PATTERN = f"{PRICE_PATTERN}\s*{CURRENCY_PATTER}|{CURRENCY_PATTER}\s*{PRICE_PATTERN}"
@@ -25,12 +26,18 @@ class GeneralizedScraper:
         self.driver = self.initialize_driver()
         self.marked_blocks = set()
         self.detected_products = set()  # Set to store detected products
+        self.wrong_titles = set()  # Set to store detected titles
         self.detected_image_urls = SortedSet()  # Ordered set for image URLs
+        self.parent_blocks = []  # change to set later, for now we use list to store all parent blocks to know how many we have
         self.shopping_website = shopping_website
         self.product_count = 0
         self.stored_products = []  # List to store gathered products (dict format)
 
     def initialize_driver(self):
+        """Initialize the Chrome driver with the necessary options.
+        this helps to avoid CAPTCHA and other bot detection mechanisms.
+        idk how this need to be done on mac or linux
+        """
         options = uc.ChromeOptions()
         user_data_dir = r"C:\Users\<YourUsername>\AppData\Local\Google\Chrome\User Data"
         profile = "Profile 1"
@@ -40,12 +47,13 @@ class GeneralizedScraper:
         driver = uc.Chrome(options=options)
         return driver
 
-    def random_delay(self, min_seconds=1, max_seconds=1):
+    def random_delay(self, min_seconds=2, max_seconds=4):
         """Mimic human-like random delay"""
         time.sleep(random.uniform(min_seconds, max_seconds))
 
     def is_captcha_present(self, soup):
         """Detect if a CAPTCHA is present based on known CAPTCHA indicators in the HTML."""
+        # TODO maybe this need to be improved
         # Define common CAPTCHA selectors
         captcha_selectors = [
             {'id': re.compile(r'captcha', re.I)},
@@ -94,10 +102,10 @@ class GeneralizedScraper:
         try:
             self.driver.get(home_url)
             self.random_delay()
-            soup = self.extract_page_structure()
-            if self.is_captcha_present(soup):
-                input("Resolve Captcha and click enter button")
-            return True
+            #soup = self.extract_page_structure()
+            #if self.is_captcha_present(soup):
+            #    input("Resolve Captcha and click enter button")
+            #return True
         except Exception as e:
             print(f"Failed to navigate to the product URL: {e}")
             return False
@@ -134,97 +142,187 @@ class GeneralizedScraper:
     @profile
     def detect_product_blocks(self, soup):
         """Detect product blocks by finding the smallest subtrees that fulfill the requirements,
-        skipping elements that are inside STRIKETHROUGH class."""
+        skipping elements that are inside STRIKETHROUGH class to avoid irrelevant items."""
+
+        # Step 1: Identify all potential blocks that might contain product information.
+        # We look for common HTML tags used to wrap products on e-commerce websites.
         blocks = soup.find_all(['div', 'li', 'article', 'span', 'ul'], recursive=True)
+
+        # Step 2: Sort blocks by depth, with the deepest elements first.
+        # Sorting by the number of parent elements allows us to process smaller, more specific blocks before larger containers.
         blocks.sort(key=lambda x: len(list(x.parents)), reverse=True)
 
+        # how many block
+        # print(f"Number of blocks: {len(blocks)}")
+
+        # Step 3: Iterate through each block to identify and process those containing product data.
         for block in blocks:
-            if block in self.marked_blocks:
-                continue  # Skip already processed blocks
+            # Skip blocks that have already been processed to prevent redundant work.
+            if id(block) in self.marked_blocks:
+                continue
 
-            if self.is_valid_product_block(block):
-                self.mark_block_and_children(block)
-                product_url, image_url, price, title = self.extract_product_info(block)
+            # Step 4: Try to extract product information from the current block.
+            # This includes URLs, images, price, and title. If any information is missing, we skip this block.
+            product_info = self.extract_product_info(block)
+            if not product_info:
+                continue  # Skip block if product data is incomplete.
 
-                filtered_price = self.filter_strikethrough_prices(block, price)
+            # Unpack extracted information.
+            product_urls, image_urls, price, title = product_info
 
-                if filtered_price:  # Only process if there is a valid price
-                    price, currency = self._get_price_currency(filtered_price)
+            # Step 5: Mark the block and all of its child elements as processed.
+            # This ensures we don't reprocess this block or its parents in future iterations.
+            self.mark_and_block(block)
 
-                    if product_url in self.detected_products:
-                        continue
-                    self.detected_products.add(product_url)
+            # Step 6: Output basic information about detected products for debugging purposes.
+            #print(f'number of product urls: {len(product_urls) if product_urls else 0}')
+            #print(f'number of image urls: {len(image_urls) if image_urls else 0}')
 
-                    if image_url in self.detected_image_urls:
-                        continue
-                    self.detected_image_urls.add(image_url)  # Mark this image URL as processed
+            # Step 7: Extract the main product URL, image URL, price, and currency.
+            # We assume the first URL and image in the list are the main ones for the product.
+            product_url = product_urls[0]
+            image_url = image_urls[0]
+            price, currency = self._get_price_currency(price)
 
-                    if not product_url.startswith("http"):
-                        if not product_url.startswith("/"):
-                            product_url = f"/{product_url}"
-                        product_url = f"{self.shopping_website}{product_url}"
+            # Step 8: Add each detected product URL and image URL to their respective sets.
+            # This helps track which URLs have already been processed.
+            for url in product_urls:
+                self.detected_products.add(url)
+            for url in image_urls:
+                self.detected_image_urls.add(url)
 
-                    self.store_product(product_url, image_url, price, currency, title)
+            # Step 9: Store the product data in a list, ready for future saving to CSV or other storage.
+            self.store_product(product_url, image_url, price, currency, title)
 
-                    #print("\n--- Detected Product Block ---")
-                    #print(f"Website: {self.shopping_website}")
-                    #print(f"Product URL: {product_url}")
-                    #print(f"Image URL: {image_url}")
-                    #print(f"Price: {price}")
-                    #print(f"Currency: {currency}")
-                    #print(f"Title: {title}")
-                    #print("--- End of Product Block ---\n")
+            # Step 10: Add a simplified version of the block’s structure to the parent_blocks set.
+            # This is primarily for tracking and reporting purposes.
+            self.parent_blocks.append(str(block).split('>')[0])
 
-                    self.product_count += 1
+            # Step 11: Print detected product details for debugging and monitoring.
+            # These prints help verify that scraping is working as intended.
+            '''print(f"Detected parent block:\n{str(block).split('>')[0]}>")
+            print("\n--- Detected Product Block ---")
+            print(f"Website: {self.shopping_website}")
+            print(f"Product URL: {product_url}")
+            print(f"Image URL: {image_url}")
+            print(f"Price: {price}")
+            print(f"Currency: {currency}")
+            print(f"Title: {title}")
+            print('other urls:')
 
-    def filter_strikethrough_prices(self, block, price):
-        """Filter out any price that is inside an element with the STRIKETHROUGH class."""
-        if block.find(class_='STRIKETHROUGH'):
-            return None  # Skip if it's a strikethrough price
-        return price
+            # Print all product URLs detected in this block.
+            print("All product URLs detected:")
+            for url in product_urls:
+                print(f"{url}\n")
 
-    def is_valid_product_block(self, block):
-        """Check if a block contains all necessary information (product URL, image URL, price, and title)."""
-        # Instead of extracting everything upfront, check key elements
-        if not block.find('a', href=True):  # Check if a product URL exists
-            return False
-        if not block.find('img', src=True):  # Check if an image URL exists
-            return False
-        if not self.find_price(block):  # Check if a price exists
-            return False
-        return True
+            # Print all image URLs detected in this block.
+            print("All image URLs detected:")
+            for url in image_urls:
+                print(f"{url}\n")
 
+            print("--- End of Product Block ---\n")'''
+
+            # Step 12: Increment the product count after successfully processing a product block.
+            self.product_count += 1
+
+    @profile
     def extract_product_info(self, block):
-        """Extract the product URL, image URL, price, and title from a block."""
-        product_url = self.find_product_url(block)
-        image_url = self.find_image_url(block)
+        """Extract product information from a block if all necessary elements are present."""
         price = self.find_price(block)
+
+        if not price:
+            return None
+
+        product_urls = self.find_product_url(block)
+
+        if not product_urls:
+            return None
+
+        image_urls = self.find_image_url(block)
+
+        if not image_urls:
+            return None
+
         title = self.find_title(block)
-        return product_url, image_url, price, title
 
+        if not title:
+            return None
+
+        return product_urls, image_urls, price, title
+
+    @profile
     def find_product_url(self, block):
-        """Find the product URL inside a block."""
-        product_url = block.find('a', href=True)
-        if product_url:
-            return normalize_url(self.shopping_website, product_url['href'])
+        """Find all product URLs inside a block and return the first non-duplicate one."""
+        product_urls = set()
+
+        # Find all <a> tags and gather their URLs
+        product_url_tags = block.find_all('a', href=True)
+        for product_url_tag in product_url_tags:
+            product_url = normalize_url(self.shopping_website, product_url_tag['href'])
+            product_urls.add(product_url)
+
+        # Remove already detected URLs
+        unique_product_urls = [url for url in product_urls if url not in self.detected_products]
+
+        # Return the first non-duplicate URL, if any
+        if unique_product_urls:
+            return unique_product_urls
+
         return None
 
+    @profile
     def find_image_url(self, block):
-        """Find the image URL inside a block (either img tag or inline style)."""
-        img_tag = block.find('img', src=True)
-        if img_tag:
-            return normalize_url(self.shopping_website, img_tag['src'])
+        # TODO check if this need to be done better
+        """Find all image URLs inside a block by checking multiple possible attributes and inline styles."""
+        image_urls = set()
 
-        style = block.get('style')
-        if style and 'background-image' in style:
-            match = re.search(r'url\((.*?)\)', style)
+        # List of possible attributes for image sources in <img> and <source> tags
+        source_attributes = [
+            ('img', 'src'),
+            ('img', 'srcset'),
+            ('img', 'data-src'),
+            ('img', 'data-srcset'),
+            ('source', 'srcset')
+        ]
+
+        # Check each attribute in <img> and <source> tags
+        for tag, attribute in source_attributes:
+            for element in block.find_all(tag):
+                if element.has_attr(attribute):
+                    urls = element[attribute].split(',')
+                    for url in urls:
+                        if not url == '':
+                            # Take the URL part only if srcset format, normalize it
+                            normalized_url = normalize_url(self.shopping_website, url.split()[0])
+                            if normalized_url:
+                                image_urls.add(normalized_url)
+
+        # Handle inline styles for background images in any tag with a style attribute
+        for tag in block.find_all(True, style=True):
+            style = tag['style']
+            # Check for 'background-image' or 'background' URLs in inline styles
+            match = re.search(r'background(?:-image)?:\s*url\((.*?)\)', style)
             if match:
-                return normalize_url(self.shopping_website, match.group(1))
+                image_url = normalize_url(self.shopping_website, match.group(1))
+                if image_url:
+                    image_urls.add(image_url)
 
-        return None
+            # Optional: Check for URLs in 'content' style property (sometimes used)
+            content_match = re.search(r'content:\s*url\((.*?)\)', style)
+            if content_match:
+                image_url = normalize_url(self.shopping_website, content_match.group(1))
+                if image_url:
+                    image_urls.add(image_url)
+
+        # Remove already detected URLs
+        unique_image_urls = [url for url in image_urls if url not in self.detected_image_urls]
+
+        return unique_image_urls or []
 
     def _get_max_price(self, price_tags):
-        """Get the maximum price from price_tags, assuming prices with STRIKETHROUGH have been filtered out."""
+        """Get the maximum price from price_tags, assuming prices with STRIKETHROUGH have been filtered out.
+        we get max price as sometimes there are small prices with number of rates!!! idk how to get this when we got full 'block' with only rates and without price
+        """
         max_price_tag = price_tags[0]
         max_price = price_tags[0][0] if price_tags[0][0] else price_tags[0][3]
         max_price = float(normalize_price(max_price))
@@ -243,18 +341,13 @@ class GeneralizedScraper:
         price = re.findall(COST_PATTERN, full_price)
         return price[0][0] + price[0][3], price[0][1] + price[0][2]
 
+    @profile
     def find_price(self, block):
         """Look for price information in the block, including cases with multi-span prices."""
-        # Find all span elements within the block
-        price_spans = block.find_all('span', recursive=True)
-        price_parts = []
-        full_text = ""
+        # Get all text within the block in one call
+        full_text = block.get_text(strip=True)
 
-        for span in price_spans:
-            text = span.get_text(strip=True)
-            full_text += text  # Combine all text content from spans into a single string
-
-        # Now apply your COST_PATTERN to the combined text
+        # Apply the COST_PATTERN to the combined text
         price_pattern = re.compile(COST_PATTERN)
         price_tags = re.findall(price_pattern, full_text)
 
@@ -264,31 +357,38 @@ class GeneralizedScraper:
 
         return None
 
+    @profile
     def find_title(self, block):
-        """Look for a string that is likely the product title."""
+        """
+        Look for a string that is likely the product title,
+        avoiding any strings found in `self.wrong_titles`.
+        """
         title_tags = block.find_all(['h1', 'h2', 'h3', 'span', 'a', 'div'])
 
         for tag in title_tags:
             if 'title' in tag.get('class', []) or 'name' in tag.get('class', []):
                 text_content = tag.get_text(strip=True)
-                if len(text_content) > 10 and not re.search(r'\d{1,2}[.,]\d{1,2}\s*[a-zA-Z]*', text_content):
+                # Check if content is valid and not in the detected "trash" titles
+                if len(text_content) > 10 and text_content not in self.wrong_titles and \
+                        not re.search(r'\d{1,2}[.,]\d{1,2}\s*[a-zA-Z]*', text_content):
                     return text_content
 
+        # Fallback to the longest text if no specific title is found
         longest_text = max(block.stripped_strings, key=len, default="")
-        if len(longest_text) > 10 and not re.search(r'\d{1,2}[.,]\d{1,2}\s*[a-zA-Z]*', longest_text):
+        if len(longest_text) > 10 and longest_text not in self.wrong_titles and \
+                not re.search(r'\d{1,2}[.,]\d{1,2}\s*[a-zA-Z]*', longest_text):
             return longest_text
 
         return None
 
-    def mark_block_and_children(self, block):
-        """Mark the block and all its children as processed."""
-        self.marked_blocks.add(block)
+    @profile
+    def mark_and_block(self, block):
+        """Mark the block and its parents to avoid reprocessing."""
+        self.marked_blocks.add(id(block))
         for parent in block.parents:
-            if parent not in self.marked_blocks:
-                self.marked_blocks.add(parent)
-        for child in block.find_all(recursive=True):
-            if child not in self.marked_blocks:
-                self.marked_blocks.add(child)
+            if id(parent) in self.marked_blocks:
+                break
+            self.marked_blocks.add(id(parent))
 
     def save_to_csv(self, save_path=None):
         """Save the stored products to a CSV file inside a directory for each e-commerce website."""
@@ -343,8 +443,40 @@ class GeneralizedScraper:
 
         print(f"Scrolled {i + 1} times")
 
+    # detect of not interesting blocks
+    def trash_detection(self, soup):
+        """
+        Detect strings that are not relevant by collecting duplicate strings
+        across different blocks on the first page and adding them to `self.wrong_titles`.
+        """
+        # Dictionary to store counts of unique strings across blocks
+        string_occurrences = defaultdict(int)
+
+        # Loop through each block and count occurrences of each unique string across blocks
+        blocks = soup.find_all(True)  # Find all tags to get strings from every block
+        for block in blocks:
+            block_strings = set()  # Track unique strings within each block
+
+            for string in block.stripped_strings:
+                # Filter short strings and avoid numbers that could indicate titles or product details
+                if len(string) > 5 and not re.search(r'\d', string):
+                    block_strings.add(string)
+
+            # Count occurrences across all blocks
+            for unique_string in block_strings:
+                string_occurrences[unique_string] += 1
+
+        # Define a threshold for what constitutes "trash" (e.g., appears in 3 or more blocks)
+        threshold = 5
+        self.wrong_titles = {string for string, count in string_occurrences.items() if count >= threshold}
+
+        # Optional: Print out detected "trash" strings for debugging, each on a new line
+        #print("Detected non-interesting (trash) titles:")
+        #for title in self.wrong_titles:
+        #    print(title)
+
     @profile
-    def scrape_all_products(self, scroll_based=False, max_pages=5, max_scrolls=1, url_template=None,
+    def scrape_all_products(self, scroll_based=False, max_pages=2, max_scrolls=1, url_template=None,
                             page_number_supported=True):
         """Scrape all products using scrolling and pagination together when both are True."""
 
@@ -364,7 +496,15 @@ class GeneralizedScraper:
 
             # Extract product blocks after scrolling
             soup = self.extract_page_structure()
+
+            # we detect duplicated urls and titles to avoid trash that is duplicated (like 'promotion' or 'discount')
+            if page_count == 1:
+                self.trash_detection(soup)
+
             self.detect_product_blocks(soup)
+
+            # how many marked blocks we have
+            print(f"Number of marked blocks: {len(self.marked_blocks)}")
 
             # clear marked blocks
             self.marked_blocks.clear()
@@ -375,75 +515,29 @@ class GeneralizedScraper:
             else:
                 break  # Stop after scrolling if pagination is not supported
 
-if __name__ == "__main__":
-    search_query = "tv"
 
-    def run_old_method(scraper, search_url_template, base_url, csv_file_name):
-        """Run the old method without scrolling or pagination and save the results."""
-        scraper.open_home_page(base_url)
-        scraper.open_search_url(search_url_template)
-        soup = scraper.extract_page_structure()
-        scraper.detect_product_blocks(soup)
-        old_method_count = scraper.product_count
-        scraper.save_to_csv(csv_file_name)  # Save to the appropriate shop folder
-        scraper.close_driver()
-        return old_method_count
+if __name__ == "__main__":
+    # PYTHONPATH=. kernprof -l -v UniversalWebshopScraper/generalized_scrapper/botleneck_testing/generalized_scrapper_2.py
+    search_query = "tv"
 
     def run_new_method(scraper, search_url_template, base_url, csv_file_name, scroll_based=False, page_number_supported=True):
         """Run the new method with scrolling or pagination and save the results."""
+        # first we need to open the home page to avoid captcha
         scraper.open_home_page(base_url)
+        # next we open the search page and start scraping products
         scraper.open_search_url(search_url_template)
+        # next we scrape all products with scrolling and pagination support if available, later on the first page we would learn parent blocks logic and then we would use it to scrape all products on other pages
         scraper.scrape_all_products(scroll_based=scroll_based, url_template=search_url_template, page_number_supported=page_number_supported)
+        # just to check how many products we have scraped
         new_method_count = scraper.product_count
-        scraper.save_to_csv(csv_file_name)  # Save to the appropriate shop folder
+        # scraper.save_to_csv(csv_file_name)  # Save to the appropriate shop folder
         scraper.close_driver()
         return new_method_count
-
-    ### Test Aliexpress (scroll-based) ###
-    home_url_aliexpress = "https://www.aliexpress.com"
-    aliexpress_search_url_template = "{home_url}/w/wholesale-{query}.html?page={{page_number}}".format(home_url=home_url_aliexpress, query=search_query.replace(" ", "+"))
-
-    scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
-    old_aliexpress_count = run_old_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products.csv')
-    print(f"Old Aliexpress product count: {old_aliexpress_count}")
-
-    scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
-    new_aliexpress_count = run_new_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products_new.csv', scroll_based=True, page_number_supported=True)
-    print(f"New Aliexpress product count: {new_aliexpress_count}")
-
-    ### Test Temu (scroll-based) ###
-    home_url_temu = "https://www.temu.com"
-    temu_search_url_template = "{base_url}/search_result.html?search_key={query}&search_method=user".format(
-        base_url=home_url_temu, query=search_query.replace(" ", "+"))
-
-    scraper = GeneralizedScraper(shopping_website=home_url_temu)
-    old_temu_count = run_old_method(scraper, temu_search_url_template, home_url_temu, 'temu_products.csv')
-    print(f"Old Temu product count: {old_temu_count}")
-
-    scraper = GeneralizedScraper(shopping_website=home_url_temu)
-    new_temu_count = run_new_method(scraper, temu_search_url_template, home_url_temu, 'temu_products_new.csv', scroll_based=True, page_number_supported=False)
-    print(f"New Temu product count: {new_temu_count}")
-
-    ### Test Amazon (pagination-based) ###
-    home_url_amazon = "https://www.amazon.com"
-    amazon_search_url_template = "{base_url}/s?k={query}&page={{page_number}}".format(base_url=home_url_amazon, query=search_query.replace(" ", "+"))
-
-    scraper = GeneralizedScraper(shopping_website=home_url_amazon)
-    old_amazon_count = run_old_method(scraper, amazon_search_url_template, home_url_amazon, 'amazon_products.csv')
-    print(f"Old Amazon product count: {old_amazon_count}")
-
-    scraper = GeneralizedScraper(shopping_website=home_url_amazon)
-    new_amazon_count = run_new_method(scraper, amazon_search_url_template, home_url_amazon, 'amazon_products_new.csv', scroll_based=True, page_number_supported=True)
-    print(f"New Amazon product count: {new_amazon_count}")
 
     ### Test Allegro (pagination-based) ###
     home_url_allegro = "https://www.allegro.pl"
     # Corrected URL template with double curly braces for page_number
     allegro_search_url_template = f'{home_url_allegro}/listing?string={search_query.replace(" ", "+")}&p={{page_number}}'
-
-    scraper = GeneralizedScraper(shopping_website=home_url_allegro)
-    old_allegro_count = run_old_method(scraper, allegro_search_url_template, home_url_allegro, 'allegro_products.csv')
-    print(f"Old Allegro product count: {old_allegro_count}")
 
     scraper = GeneralizedScraper(shopping_website=home_url_allegro)
     new_allegro_count = run_new_method(scraper, allegro_search_url_template, home_url_allegro,
@@ -456,9 +550,30 @@ if __name__ == "__main__":
         base_url=home_url_ebay, query=search_query.replace(" ", "+"))
 
     scraper = GeneralizedScraper(shopping_website=home_url_ebay)
-    old_ebay_count = run_old_method(scraper, ebay_search_url_template, home_url_ebay, 'ebay_products.csv')
-    print(f"Old eBay product count: {old_ebay_count}")
-
-    scraper = GeneralizedScraper(shopping_website=home_url_ebay)
     new_ebay_count = run_new_method(scraper, ebay_search_url_template, home_url_ebay, 'ebay_products_new.csv', scroll_based=True, page_number_supported=True)
     print(f"New eBay product count: {new_ebay_count}")
+
+    ### Test Aliexpress (scroll-based) ###
+    home_url_aliexpress = "https://www.aliexpress.com"
+    aliexpress_search_url_template = "{home_url}/w/wholesale-{query}.html?page={{page_number}}".format(home_url=home_url_aliexpress, query=search_query.replace(" ", "+"))
+
+    scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
+    new_aliexpress_count = run_new_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products_new.csv', scroll_based=True, page_number_supported=True)
+    print(f"New Aliexpress product count: {new_aliexpress_count}")
+
+    ### Test Temu (scroll-based) ###
+    home_url_temu = "https://www.temu.com"
+    temu_search_url_template = "{base_url}/search_result.html?search_key={query}&search_method=user".format(
+        base_url=home_url_temu, query=search_query.replace(" ", "+"))
+
+    scraper = GeneralizedScraper(shopping_website=home_url_temu)
+    new_temu_count = run_new_method(scraper, temu_search_url_template, home_url_temu, 'temu_products_new.csv', scroll_based=True, page_number_supported=False)
+    print(f"New Temu product count: {new_temu_count}")
+
+    ### Test Amazon (pagination-based) ###
+    home_url_amazon = "https://www.amazon.com"
+    amazon_search_url_template = "{base_url}/s?k={query}&page={{page_number}}".format(base_url=home_url_amazon, query=search_query.replace(" ", "+"))
+
+    scraper = GeneralizedScraper(shopping_website=home_url_amazon)
+    new_amazon_count = run_new_method(scraper, amazon_search_url_template, home_url_amazon, 'amazon_products_new.csv', scroll_based=True, page_number_supported=True)
+    print(f"New Amazon product count: {new_amazon_count}")

@@ -10,6 +10,7 @@ import cProfile
 from line_profiler import profile
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from collections import defaultdict
 
 from urllib.parse import urljoin, urlparse, parse_qs, urlencode, urlunparse
 from functools import wraps
@@ -157,7 +158,7 @@ class GeneralizedScraper:
         self.driver = self.initialize_driver()
         self.marked_blocks = set()
         self.detected_products = set()  # Set to store detected products
-        self.detected_titles = set()  # Set to store detected titles
+        self.wrong_titles = set()  # Set to store detected titles
         self.detected_image_urls = SortedSet()  # Ordered set for image URLs
         self.parent_blocks = []  # change to set later, for now we use list to store all parent blocks to know how many we have
         self.shopping_website = shopping_website
@@ -284,7 +285,7 @@ class GeneralizedScraper:
         blocks.sort(key=lambda x: len(list(x.parents)), reverse=True)
 
         # how many block
-        print(f"Number of blocks: {len(blocks)}")
+        # print(f"Number of blocks: {len(blocks)}")
 
         # Step 3: Iterate through each block to identify and process those containing product data.
         for block in blocks:
@@ -359,13 +360,24 @@ class GeneralizedScraper:
     @profile
     def extract_product_info(self, block):
         """Extract product information from a block if all necessary elements are present."""
-        product_urls = self.find_product_url(block)
-        image_urls = self.find_image_url(block)
         price = self.find_price(block)
+
+        if not price:
+            return None
+
+        product_urls = self.find_product_url(block)
+
+        if not product_urls:
+            return None
+
+        image_urls = self.find_image_url(block)
+
+        if not image_urls:
+            return None
+
         title = self.find_title(block)
 
-        # Check that all elements are present; return None if any are missing
-        if not (product_urls and image_urls and price and title):
+        if not title:
             return None
 
         return product_urls, image_urls, price, title
@@ -411,7 +423,7 @@ class GeneralizedScraper:
                 if element.has_attr(attribute):
                     urls = element[attribute].split(',')
                     for url in urls:
-                        if not url == '': #TODO why sometimes it is empty???
+                        if not url == '':
                             # Take the URL part only if srcset format, normalize it
                             normalized_url = normalize_url(self.shopping_website, url.split()[0])
                             if normalized_url:
@@ -477,19 +489,26 @@ class GeneralizedScraper:
 
         return None
 
+    @profile
     def find_title(self, block):
-        # TODO
-        """Look for a string that is likely the product title."""
+        """
+        Look for a string that is likely the product title,
+        avoiding any strings found in `self.wrong_titles`.
+        """
         title_tags = block.find_all(['h1', 'h2', 'h3', 'span', 'a', 'div'])
 
         for tag in title_tags:
             if 'title' in tag.get('class', []) or 'name' in tag.get('class', []):
                 text_content = tag.get_text(strip=True)
-                if len(text_content) > 10 and not re.search(r'\d{1,2}[.,]\d{1,2}\s*[a-zA-Z]*', text_content):
+                # Check if content is valid and not in the detected "trash" titles
+                if len(text_content) > 10 and text_content not in self.wrong_titles and \
+                        not re.search(r'\d{1,2}[.,]\d{1,2}\s*[a-zA-Z]*', text_content):
                     return text_content
 
+        # Fallback to the longest text if no specific title is found
         longest_text = max(block.stripped_strings, key=len, default="")
-        if len(longest_text) > 10 and not re.search(r'\d{1,2}[.,]\d{1,2}\s*[a-zA-Z]*', longest_text):
+        if len(longest_text) > 10 and longest_text not in self.wrong_titles and \
+                not re.search(r'\d{1,2}[.,]\d{1,2}\s*[a-zA-Z]*', longest_text):
             return longest_text
 
         return None
@@ -557,9 +576,36 @@ class GeneralizedScraper:
         print(f"Scrolled {i + 1} times")
 
     # detect of not interesting blocks
-    def trash_detection(self, block):
-        # TODO here we need to detect not interesting blocks
-        pass
+    def trash_detection(self, soup):
+        """
+        Detect strings that are not relevant by collecting duplicate strings
+        across different blocks on the first page and adding them to `self.wrong_titles`.
+        """
+        # Dictionary to store counts of unique strings across blocks
+        string_occurrences = defaultdict(int)
+
+        # Loop through each block and count occurrences of each unique string across blocks
+        blocks = soup.find_all(True)  # Find all tags to get strings from every block
+        for block in blocks:
+            block_strings = set()  # Track unique strings within each block
+
+            for string in block.stripped_strings:
+                # Filter short strings and avoid numbers that could indicate titles or product details
+                if len(string) > 5 and not re.search(r'\d', string):
+                    block_strings.add(string)
+
+            # Count occurrences across all blocks
+            for unique_string in block_strings:
+                string_occurrences[unique_string] += 1
+
+        # Define a threshold for what constitutes "trash" (e.g., appears in 3 or more blocks)
+        threshold = 5
+        self.wrong_titles = {string for string, count in string_occurrences.items() if count >= threshold}
+
+        # Optional: Print out detected "trash" strings for debugging, each on a new line
+        #print("Detected non-interesting (trash) titles:")
+        #for title in self.wrong_titles:
+        #    print(title)
 
     @profile
     def scrape_all_products(self, scroll_based=False, max_pages=2, max_scrolls=1, url_template=None,
@@ -600,16 +646,6 @@ class GeneralizedScraper:
                 page_count += 1
             else:
                 break  # Stop after scrolling if pagination is not supported
-
-        # print all patent blocks
-        # TODO here we are checking if we are detecting good parent blocks!!!
-        # if we havee those correct parent blocks we can use them to scrape all products on other pages so 1 more simple function to be added
-        print('parent blocks:')
-        # Count each unique parent block string
-        parent_block_counts = Counter(self.parent_blocks)
-        for block, count in parent_block_counts.items():
-            print(f"{block}: detected {count} times")
-        print('end of parent blocks')
 
 
 if __name__ == "__main__":
