@@ -55,7 +55,7 @@ class GeneralizedScraper:
         driver = uc.Chrome(options=options)
         return driver
 
-    def random_delay(self, min_seconds=3, max_seconds=5):
+    def random_delay(self, min_seconds=1, max_seconds=2):
         """
         Mimic human-like random delay.
 
@@ -502,7 +502,7 @@ class GeneralizedScraper:
                 break
             self.marked_blocks.add(id(parent))
 
-    def save_to_csv(self, save_path=None):
+    def save_to_csv(self, save_path=None, category=None):
         """
         Save the stored products to a CSV file.
 
@@ -514,7 +514,7 @@ class GeneralizedScraper:
             website_name = self.shopping_website.replace("https://", "").replace("www.", "").split('.')[0]
 
             # Create directory for the specific website inside the 'scraped_data' folder
-            save_dir = os.path.join('scraped_data', website_name)
+            save_dir = os.path.join('scraped_data', website_name, category)
 
             # Create the directory if it doesn't exist
             if not os.path.exists(save_dir):

@@ -1,4 +1,5 @@
 import os
+import pandas as pd
 
 from UniversalWebshopScraper.generalized_scrapper.generalized_scrapper import GeneralizedScraper
 
@@ -495,10 +496,6 @@ if __name__ == "__main__":
             print(f"--- Searching category: {category} ---")
             category_start_count = scraper.product_count
 
-            # Directory for the specific category
-            category_save_path = os.path.join(site_save_path, category.replace(" & ", "_").replace(" ", "_"))
-            os.makedirs(category_save_path, exist_ok=True)
-
             for product in products:
                 product_start_count = scraper.product_count
                 print(f"Searching for product: {product}")
@@ -506,15 +503,19 @@ if __name__ == "__main__":
                     base_url=home_url_amazon, query=product.replace(" ", "+"), page_number="{page_number}")
 
                 scraper.open_search_url(search_url.format(page_number=1))
-                scraper.scrape_all_products(scroll_based=True, url_template=search_url, page_number_supported=True)
+                scraper.scrape_all_products(scroll_based=False, url_template=search_url, page_number_supported=True)
 
             # Calculate the number of products scraped for this category
             category_product_count = scraper.product_count - category_start_count
             print(f"Found {category_product_count} new products in the category: {category}")
 
             # Save collected products to a CSV for this category
-            csv_filename = os.path.join(category_save_path, f"{site_name}_{category}_scraped_products.csv")
-            scraper.save_to_csv(csv_filename)
+            category = category.replace(" & ", "_").replace(" ", "_")
+            save_path = os.path.join(site_save_path, f"{category}.csv")
+            print(f"Saving products to: {save_path}")
+            df = pd.DataFrame(scraper.stored_products)
+            df.to_csv(save_path, index=False)
+
             # after saving we should clear the products list
             scraper.stored_products = []
 
