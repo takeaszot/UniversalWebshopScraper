@@ -249,8 +249,10 @@ class GeneralizedScraper:
             # This helps track which URLs have already been processed.
             for url in product_urls:
                 self.detected_products.add(url)
+
             for url in image_urls:
-                self.detected_image_urls.add(url)
+                if url not in self.detected_image_urls:
+                    self.detected_image_urls.append(url)
 
             # Step 9: Store the product data in a list, ready for future saving to CSV or other storage.
             self.store_product(product_url, image_url, price, currency, title)
@@ -608,7 +610,7 @@ class GeneralizedScraper:
         #    print(title)
 
     @profile
-    def scrape_all_products(self, scroll_based=False, max_pages=2, max_scrolls=2, url_template=None,
+    def scrape_all_products(self, scroll_based=False, max_pages=25, max_scrolls=2, url_template=None,
                             page_number_supported=True):
         """
         Scrape all products using pagination and scrolling if enabled.
