@@ -9,6 +9,7 @@ import os
 import cProfile
 from line_profiler import profile
 from collections import defaultdict
+import tempfile
 
 from UniversalWebshopScraper.generalized_scrapper.functions import detect_captcha_detector, normalize_price, normalize_url
 
@@ -52,8 +53,11 @@ class GeneralizedScraper:
         options.add_argument("--disable-extensions")
         options.add_argument("--disable-popup-blocking")
 
-        # Initialize Chrome driver with the specified options
-        driver = uc.Chrome(options=options)
+        # Create a unique temporary directory for undetected_chromedriver data_path
+        temp_data_path = tempfile.mkdtemp()
+
+        # Initialize Chrome driver with the specified options and unique data_path
+        driver = uc.Chrome(options=options, user_data_dir=temp_data_path)
         return driver
 
     def random_delay(self, min_seconds=0, max_seconds=1):
