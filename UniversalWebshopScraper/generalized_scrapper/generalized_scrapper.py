@@ -28,7 +28,9 @@ class GeneralizedScraper:
     Args:
         shopping_website (str): The URL of the shopping website.
     """
-    def __init__(self, shopping_website=None):
+    def __init__(self, shopping_website=None, user_data_dir=None):
+        self.shopping_website = shopping_website
+        self.user_data_dir = user_data_dir
         self.driver = self.initialize_driver()
         self.marked_blocks = set()  # Set to store marked blocks
         self.detected_products = set()  # Set to store detected products
@@ -40,22 +42,21 @@ class GeneralizedScraper:
         self.stored_products = []  # List to store gathered products (dict format)
 
     def initialize_driver(self):
-        """
-        Initialize the Chrome driver with necessary options for avoiding CAPTCHA detection.
-
-        Returns:
-            driver: The initialized Chrome driver with customized options.
-        """
+        import undetected_chromedriver as uc
         options = uc.ChromeOptions()
-        user_data_dir = r"C:\Users\<YourUsername>\AppData\Local\Google\Chrome\User Data"
-        profile = "Profile 1"
-        options.add_argument(f"user-data-dir={user_data_dir}")
-        options.add_argument(f"profile-directory={profile}")
-        options.add_argument('--disable-blink-features=AutomationControlled')
+
+        # Set user data directory to enforce separate profiles
+        options.add_argument(f"user-data-dir={self.user_data_dir}")
+        options.add_argument("--no-first-run")
+        options.add_argument("--new-window")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-popup-blocking")
+
+        # Initialize Chrome driver with the specified options
         driver = uc.Chrome(options=options)
         return driver
 
-    def random_delay(self, min_seconds=1, max_seconds=2):
+    def random_delay(self, min_seconds=0, max_seconds=1):
         """
         Mimic human-like random delay.
 
@@ -132,9 +133,9 @@ class GeneralizedScraper:
         try:
             self.driver.get(home_url)
             self.random_delay()
-            soup = self.extract_page_structure()
-            if self.is_captcha_present(soup):
-                input("Resolve Captcha and click enter button")
+            #soup = self.extract_page_structure()
+            #if self.is_captcha_present(soup):
+            #    input("Resolve Captcha and click enter button")
             return True
         except Exception as e:
             print(f"Failed to navigate to the product URL: {e}")
@@ -154,8 +155,8 @@ class GeneralizedScraper:
             self.driver.get(search_url.format(page_number=1))
             self.random_delay()
             soup = self.extract_page_structure()
-            if self.is_captcha_present(soup):
-                input("Resolve Captcha and click enter button")
+            ##if self.is_captcha_present(soup):
+            #    input("Resolve Captcha and click enter button")
             return True
         except Exception as e:
             print(f"Failed to navigate to the product URL: {e}")
@@ -603,7 +604,7 @@ class GeneralizedScraper:
         #    print(title)
 
     @profile
-    def scrape_all_products(self, scroll_based=False, max_pages=20, max_scrolls=1, url_template=None,
+    def scrape_all_products(self, scroll_based=False, max_pages=20, max_scrolls=2, url_template=None,
                             page_number_supported=True):
         """
         Scrape all products using pagination and scrolling if enabled.
