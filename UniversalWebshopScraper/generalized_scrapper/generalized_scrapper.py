@@ -604,7 +604,7 @@ class GeneralizedScraper:
         #    print(title)
 
     @profile
-    def scrape_all_products(self, scroll_based=False, max_pages=20, max_scrolls=2, url_template=None,
+    def scrape_all_products(self, scroll_based=False, max_pages=2, max_scrolls=2, url_template=None,
                             page_number_supported=True):
         """
         Scrape all products using pagination and scrolling if enabled.
