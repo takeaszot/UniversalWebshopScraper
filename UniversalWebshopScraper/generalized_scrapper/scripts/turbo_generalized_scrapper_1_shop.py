@@ -2,8 +2,6 @@ import tempfile
 from multiprocessing import Process, Manager, set_start_method, Queue
 from UniversalWebshopScraper.generalized_scrapper.core.generalized_scrapper import GeneralizedScraper
 import time
-import sys
-import os
 import traceback
 
 def worker_process(task_queue, status_queue, detected_image_urls, worker_index):
@@ -81,12 +79,6 @@ def worker_process(task_queue, status_queue, detected_image_urls, worker_index):
 
                 # Save the products collected by this worker to CSV.
                 scraper.save_to_csv(save_path=csv_filename, category=category)
-
-                # Verify that the file was created
-                if os.path.exists(csv_filename):
-                    print(f"[INFO] Worker-{worker_index}: CSV file '{csv_filename}' successfully created.")
-                else:
-                    print(f"[ERROR] Worker-{worker_index}: CSV file '{csv_filename}' was not found after saving.")
 
                 # Signal task completion to the main process
                 status_queue.put(('done', worker_index))
