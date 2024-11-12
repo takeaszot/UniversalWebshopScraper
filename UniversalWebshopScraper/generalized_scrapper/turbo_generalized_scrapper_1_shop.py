@@ -1,65 +1,50 @@
 import os
 import tempfile
 import pandas as pd
-from multiprocessing import Process, Manager, set_start_method, Barrier
+from multiprocessing import Process, Manager, Barrier, set_start_method
 from UniversalWebshopScraper.generalized_scrapper.generalized_scrapper import GeneralizedScraper
 import time
 
 
-def run_scraper(site_info, category, products, detected_image_urls, user_data_dir, shared_stored_products, worker_id,
-                n_workers, barrier):
-    # Initialize the scraper once per worker
-    scraper = GeneralizedScraper(shopping_website=site_info["home_url"], user_data_dir=user_data_dir)
-    scraper.detected_image_urls = detected_image_urls  # Use shared list
+def run_scraper(site_info, category, products, detected_image_urls, user_data_dir, worker_id, n_workers, barrier):
+    try:
+        scraper = GeneralizedScraper(shopping_website=site_info["home_url"], user_data_dir=user_data_dir)
+        scraper.detected_image_urls = detected_image_urls  # Use shared list
 
-    if not scraper.open_home_page(site_info["home_url"]):
-        print(f"[ERROR] Worker {worker_id}: Failed to open home page for {site_info['name']}")
-        return
+        if not scraper.open_home_page(site_info["home_url"]):
+            print(f"[ERROR] Worker {worker_id}: Failed to open home page for {site_info['name']}")
+            return
 
-    print(f"***** Worker {worker_id} started for category {category} on {site_info['name']} *****")
+        print(f"***** Worker {worker_id} started for category {category} on {site_info['name']} *****")
 
-    # Split the product list across all workers using worker_id and n_workers
-    product_chunk = products[worker_id::n_workers]
+        # Split the product list across all workers using worker_id and n_workers
+        product_chunk = products[worker_id::n_workers]
 
-    for product in product_chunk:
-        print(f"Worker {worker_id} searching for product: {product}")
-        search_url = site_info["search_url_template"].format(
-            base_url=site_info["home_url"], query=product.replace(" ", "+"), page_number="{page_number}"
-        )
+        for product in product_chunk:
+            print(f"Worker {worker_id} searching for product: {product}")
+            search_url = site_info["search_url_template"].format(
+                base_url=site_info["home_url"], query=product.replace(" ", "+"), page_number="{page_number}"
+            )
 
-        scraper.open_search_url(search_url.format(page_number=1))
-        scraper.scrape_all_products(scroll_based=False, url_template=search_url, page_number_supported=True)
+            scraper.open_search_url(search_url.format(page_number=1))
+            scraper.scrape_all_products(scroll_based=False, url_template=search_url, page_number_supported=True)
 
-    # Append the results of this worker to the shared list
-    print(f"Worker {worker_id} collected {len(scraper.stored_products)} products for category {category}")
+        print(f"Worker {worker_id} collected {len(scraper.stored_products)} products for category {category}")
 
-    shared_stored_products.extend(scraper.stored_products)
-    scraper.stored_products = []  # Clear stored products for the next category
+        # Construct the CSV filename using the specified format: batch_N_website_name_category_products
+        csv_filename = f"batch_{worker_id}_{site_info['name']}_{category.replace(' ', '_')}_products.csv"
 
-    # Wait until all workers have completed this category
-    barrier.wait()
+        # Save the results for this worker using the scraper's save_to_csv method
+        scraper.save_to_csv(save_path=csv_filename, category=category)
 
-    print(f"Worker {worker_id}: Closing Chrome driver...")
-    scraper.close_driver()  # Close the driver after all categories are done
-
-
-def save_category_data(category, shared_stored_products, site_save_path):
-    """Save the collected data for the given category to a CSV file."""
-    category_products = [product for product in shared_stored_products if product.get("Category") == category]
-
-    if category_products:
-        category_save_path = os.path.join(site_save_path, f"{category.replace(' ', '_')}.csv")
-        df = pd.DataFrame(category_products)
-        df.to_csv(category_save_path, index=False)
-        print(f"Saved {len(category_products)} products for category {category} to {category_save_path}")
-    else:
-        print(f"No products found for category {category}, nothing saved.")
+    finally:
+        scraper.close_driver()
+        barrier.wait()  # Ensure all workers hit the barrier before closing
 
 
 def main_scraper(site_info, categories_amazon_products, n_workers=2):
     manager = Manager()
     detected_image_urls = manager.list()  # Shared list across processes
-    shared_stored_products = manager.list()  # Shared list to gather products across workers
 
     for category, products in categories_amazon_products.items():
         print(f"Starting category: {category}")
@@ -75,31 +60,19 @@ def main_scraper(site_info, categories_amazon_products, n_workers=2):
 
             process = Process(
                 target=run_scraper,
-                args=(
-                    site_info, category, products, detected_image_urls, temp_dir, shared_stored_products, i, n_workers,
-                    barrier
-                )
+                args=(site_info, category, products, detected_image_urls, temp_dir, i, n_workers, barrier)
             )
             processes.append(process)
             process.start()
 
-            time.sleep(4)  # Delay to avoid simultaneous driver conflicts
+            time.sleep(4)  # Stagger starts to avoid conflicts
 
         # Wait for all worker processes to complete this category
         for process in processes:
             process.join()
 
-        # Save results for this category after all workers have completed
-        site_save_path = os.path.join('./scraped_data', site_info["name"].lower())
-        os.makedirs(site_save_path, exist_ok=True)
+        print(f"Finished category: {category}, moving to the next.")
 
-        print(f"number of shared_stored_products: {len(shared_stored_products)}")
-        # Call the function to save data for the current category
-        save_category_data(category, shared_stored_products, site_save_path)
-
-        # Clear the shared products list for the next category
-        shared_stored_products[:] = []  # Ensure it is empty before starting the next category
-        print(f"number of shared_stored_products: {len(shared_stored_products)}")
 
 if __name__ == "__main__":
     set_start_method("spawn", force=True)
