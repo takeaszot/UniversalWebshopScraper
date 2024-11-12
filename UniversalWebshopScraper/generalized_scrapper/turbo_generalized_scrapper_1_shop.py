@@ -1,11 +1,13 @@
 import os
 import tempfile
 import pandas as pd
-from multiprocessing import Process, Manager, set_start_method
+from multiprocessing import Process, Manager, set_start_method, Barrier
 from UniversalWebshopScraper.generalized_scrapper.generalized_scrapper import GeneralizedScraper
 import time
 
-def run_scraper(site_info, categories_amazon_products, detected_image_urls, user_data_dir, shared_stored_products, worker_id, n_workers):
+
+def run_scraper(site_info, category, products, detected_image_urls, user_data_dir, shared_stored_products, worker_id,
+                n_workers, barrier):
     # Initialize the scraper once per worker
     scraper = GeneralizedScraper(shopping_website=site_info["home_url"], user_data_dir=user_data_dir)
     scraper.detected_image_urls = detected_image_urls  # Use shared list
@@ -14,75 +16,97 @@ def run_scraper(site_info, categories_amazon_products, detected_image_urls, user
         print(f"[ERROR] Worker {worker_id}: Failed to open home page for {site_info['name']}")
         return
 
-    print(f"***** Worker {worker_id} started for {site_info['name']} *****")
+    print(f"***** Worker {worker_id} started for category {category} on {site_info['name']} *****")
 
-    for category, products in categories_amazon_products.items():
-        print(f"Worker {worker_id} starting category: {category}")
+    # Split the product list across all workers using worker_id and n_workers
+    product_chunk = products[worker_id::n_workers]
 
-        # Split the product list across all workers using worker_id and n_workers
-        product_chunk = products[worker_id::n_workers]
+    for product in product_chunk:
+        print(f"Worker {worker_id} searching for product: {product}")
+        search_url = site_info["search_url_template"].format(
+            base_url=site_info["home_url"], query=product.replace(" ", "+"), page_number="{page_number}"
+        )
 
-        for product in product_chunk:
-            print(f"Worker {worker_id} searching for product: {product}")
-            search_url = site_info["search_url_template"].format(
-                base_url=site_info["home_url"], query=product.replace(" ", "+"), page_number="{page_number}"
-            )
+        scraper.open_search_url(search_url.format(page_number=1))
+        scraper.scrape_all_products(scroll_based=False, url_template=search_url, page_number_supported=True)
 
-            scraper.open_search_url(search_url.format(page_number=1))
-            scraper.scrape_all_products(scroll_based=False, url_template=search_url, page_number_supported=True)
+    # Append the results of this worker to the shared list
+    print(f"Worker {worker_id} collected {len(scraper.stored_products)} products for category {category}")
 
-        # Append the results of this worker to the shared list
-        shared_stored_products.extend(scraper.stored_products)
-        scraper.stored_products = []  # Clear stored products for the next category
+    shared_stored_products.extend(scraper.stored_products)
+    scraper.stored_products = []  # Clear stored products for the next category
 
-        print(f"***** Worker {worker_id} finished category {category} for {site_info['name']} *****")
+    # Wait until all workers have completed this category
+    barrier.wait()
 
     print(f"Worker {worker_id}: Closing Chrome driver...")
     scraper.close_driver()  # Close the driver after all categories are done
+
+
+def save_category_data(category, shared_stored_products, site_save_path):
+    """Save the collected data for the given category to a CSV file."""
+    category_products = [product for product in shared_stored_products if product.get("Category") == category]
+
+    if category_products:
+        category_save_path = os.path.join(site_save_path, f"{category.replace(' ', '_')}.csv")
+        df = pd.DataFrame(category_products)
+        df.to_csv(category_save_path, index=False)
+        print(f"Saved {len(category_products)} products for category {category} to {category_save_path}")
+    else:
+        print(f"No products found for category {category}, nothing saved.")
+
 
 def main_scraper(site_info, categories_amazon_products, n_workers=2):
     manager = Manager()
     detected_image_urls = manager.list()  # Shared list across processes
     shared_stored_products = manager.list()  # Shared list to gather products across workers
 
-    processes = []
-    for i in range(n_workers):
-        # Create a unique temporary directory for each Chrome instance
-        temp_dir = tempfile.mkdtemp()
-        print(f"[INFO] Created temporary directory for Chrome instance: {temp_dir}")
+    for category, products in categories_amazon_products.items():
+        print(f"Starting category: {category}")
 
-        process = Process(
-            target=run_scraper,
-            args=(site_info, categories_amazon_products, detected_image_urls, temp_dir, shared_stored_products, i, n_workers)
-        )
-        processes.append(process)
-        process.start()
+        # Create a new barrier for each category to ensure synchronization per category
+        barrier = Barrier(n_workers)
 
-        time.sleep(2)
+        processes = []
+        for i in range(n_workers):
+            # Create a unique temporary directory for each Chrome instance
+            temp_dir = tempfile.mkdtemp()
+            print(f"[INFO] Created temporary directory for Chrome instance: {temp_dir}")
 
-    # Wait for all worker processes to complete
-    for process in processes:
-        process.join()
+            process = Process(
+                target=run_scraper,
+                args=(
+                    site_info, category, products, detected_image_urls, temp_dir, shared_stored_products, i, n_workers,
+                    barrier
+                )
+            )
+            processes.append(process)
+            process.start()
 
-    # After all workers complete, save the collected results for each category
-    site_save_path = os.path.join('./scraped_data', site_info["name"].lower())
-    os.makedirs(site_save_path, exist_ok=True)
+            time.sleep(4)  # Delay to avoid simultaneous driver conflicts
 
-    for category in categories_amazon_products.keys():
-        # Filter out only the products for this category
-        category_products = [product for product in shared_stored_products if product.get("Category") == category]
+        # Wait for all worker processes to complete this category
+        for process in processes:
+            process.join()
 
-        if category_products:
-            category_save_path = os.path.join(site_save_path, f"{category.replace(' ', '_')}.csv")
-            df = pd.DataFrame(category_products)
-            df.to_csv(category_save_path, index=False)
-            print(f"Saved {len(category_products)} products for category {category} to {category_save_path}")
+        # Save results for this category after all workers have completed
+        site_save_path = os.path.join('./scraped_data', site_info["name"].lower())
+        os.makedirs(site_save_path, exist_ok=True)
+
+        print(f"number of shared_stored_products: {len(shared_stored_products)}")
+        # Call the function to save data for the current category
+        save_category_data(category, shared_stored_products, site_save_path)
+
+        # Clear the shared products list for the next category
+        shared_stored_products[:] = []  # Ensure it is empty before starting the next category
+        print(f"number of shared_stored_products: {len(shared_stored_products)}")
 
 if __name__ == "__main__":
     set_start_method("spawn", force=True)
 
     shopping_sites = [
-        {"name": "ebay", "home_url": "https://www.ebay.com", "search_url_template": "{base_url}/sch/i.html?_nkw={query}&_pgn={{page_number}}"}
+        {"name": "ebay", "home_url": "https://www.ebay.com",
+         "search_url_template": "{base_url}/sch/i.html?_nkw={query}&_pgn={{page_number}}"}
     ]
 
     categories_products = {
@@ -546,7 +570,6 @@ if __name__ == "__main__":
         ]
 
     }
-
 
     n_workers = 10  # Define the number of workers
 

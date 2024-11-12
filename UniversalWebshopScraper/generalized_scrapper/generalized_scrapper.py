@@ -625,7 +625,7 @@ class GeneralizedScraper:
 
         page_count = 1
         while page_count <= max_pages:
-            print(f"Scraping page {page_count}")
+            # print(f"Scraping page {page_count}")
 
             # Load the current page using pagination if supported
             if page_number_supported and url_template:
@@ -658,6 +658,7 @@ class GeneralizedScraper:
             else:
                 break  # Stop after scrolling if pagination is not supported
 
+        print(f"Scraped {self.product_count} products in total.")
         # clear all trash titles after scraping all products on all pages
         self.wrong_titles.clear()
 
