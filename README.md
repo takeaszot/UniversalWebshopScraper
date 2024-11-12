@@ -24,7 +24,18 @@ Follow these steps to set up the project on your local machine:
    ```bash
    git clone https://github.com/takeaszot/UniversalWebshopScraper.git
    ```
+Navigate to the Project Directory
 
+bash
+Copy code
+cd UniversalWebshopScraper
+Install Required Python Packages
+
+Make sure you have pip installed, then install the dependencies:
+
+bash
+Copy code
+pip install -r requirements.txt
 
 
 ## Project Overview

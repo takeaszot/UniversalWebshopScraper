@@ -207,7 +207,7 @@ def main_scraper(site_info, categories_amazon_products, n_workers=2):
         completed_workers = set()
         while len(completed_workers) < current_n_workers:
             try:
-                status, worker_index = status_queue.get(timeout=300)  # Wait up to 5 minutes per category
+                status, worker_index = status_queue.get()  # Remove the timeout parameter
                 if status == 'done':
                     print(f"[INFO] MainScraper: Worker-{worker_index} completed category '{category}'.")
                     completed_workers.add(worker_index)
@@ -215,8 +215,8 @@ def main_scraper(site_info, categories_amazon_products, n_workers=2):
                     print(f"[ERROR] MainScraper: Worker-{worker_index} failed during processing.")
                     active_workers.discard(worker_index)
                     completed_workers.add(worker_index)
-            except:
-                print("[ERROR] MainScraper: Timeout waiting for workers to complete tasks.")
+            except Exception as e:
+                print(f"[ERROR] MainScraper: Unexpected error: {e}")
                 break
 
         print(f"[INFO] MainScraper: Finished category: {category}, moving to the next.")
