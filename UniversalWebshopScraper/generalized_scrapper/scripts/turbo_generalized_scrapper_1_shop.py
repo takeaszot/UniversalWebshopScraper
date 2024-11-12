@@ -2,7 +2,6 @@ import tempfile
 from multiprocessing import Process, Manager, Barrier, set_start_method, Queue
 from UniversalWebshopScraper.generalized_scrapper.core.generalized_scrapper import GeneralizedScraper
 import time
-import sys
 import os
 import traceback
 
