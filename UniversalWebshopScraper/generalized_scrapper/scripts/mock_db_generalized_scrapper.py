@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-from UniversalWebshopScraper.generalized_scrapper.generalized_scrapper import GeneralizedScraper
+from UniversalWebshopScraper.generalized_scrapper.core.generalized_scrapper import GeneralizedScraper
 
 if __name__ == "__main__":
     # Categories and products to search for
@@ -484,7 +484,7 @@ if __name__ == "__main__":
         }'''
     ]
 
-    save_path = "./scraped_data"
+    save_path = "../scraped_data"
     os.makedirs(save_path, exist_ok=True)
 
     for site_info in shopping_sites:

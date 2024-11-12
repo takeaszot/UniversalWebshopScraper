@@ -1,22 +1,21 @@
 import random
 import time
-import undetected_chromedriver as uc
 from bs4 import BeautifulSoup
 import re
 from sortedcontainers import SortedSet
 import pandas as pd
 import os
-import cProfile
 from line_profiler import profile
 from collections import defaultdict
 import tempfile
 
-from UniversalWebshopScraper.generalized_scrapper.functions import detect_captcha_detector, normalize_price, normalize_url
+from UniversalWebshopScraper.generalized_scrapper.core.functions import normalize_price, normalize_url
 
 """
 
 
 """
+
 # Define the patterns for detecting prices and currencies should work for all currencies and prices with or without commas
 CURRENCY_PATTER = r"(\$|€|£|zł|PLN|USD|GBP|JPY|AUD)"
 PRICE_PATTERN = r"(\d+(?:[.,]\d{3})*(?:[.,]\d\d))"
@@ -24,15 +23,32 @@ COST_PATTERN = f"{PRICE_PATTERN}\s*{CURRENCY_PATTER}|{CURRENCY_PATTER}\s*{PRICE_
 
 class GeneralizedScraper:
     """
-    Initialize the GeneralizedScraper object with necessary attributes.
+    A class to initialize and manage a web scraper for e-commerce websites, with
+    attributes to store detected products, handle CAPTCHA detection, and manage
+    a Selenium WebDriver instance for automated browsing.
 
     Args:
-        shopping_website (str): The URL of the shopping website.
+        shopping_website (str, optional): The URL of the shopping website to scrape.
+        user_data_dir (str, optional): The directory path for storing user data, allowing
+                                       persistence of session information between scrapes.
     """
     def __init__(self, shopping_website=None, user_data_dir=None):
-        self.shopping_website = shopping_website
-        self.user_data_dir = user_data_dir
-        self.driver = self.initialize_driver()
+        """
+         Initializes the GeneralizedScraper instance with necessary attributes
+         for web scraping operations.
+
+         This includes setting up a Selenium WebDriver instance, initializing sets and
+         lists to store product and CAPTCHA information, and setting up configurations
+         specific to the shopping website.
+
+         Args:
+             shopping_website (str, optional): The URL of the shopping website.
+             user_data_dir (str, optional): Directory for storing user data, enabling
+                                            persistence of session information.
+         """
+        self.shopping_website = shopping_website  # The URL of the shopping website
+        self.user_data_dir = user_data_dir  # Directory for storing user data
+        self.driver = self.initialize_driver()  # Initialize the Chrome WebDriver
         self.marked_blocks = set()  # Set to store marked blocks
         self.detected_products = set()  # Set to store detected products
         self.wrong_titles = set()  # Set to store detected titles
@@ -43,7 +59,21 @@ class GeneralizedScraper:
         self.stored_products = []  # List to store gathered products (dict format)
 
     def initialize_driver(self):
+        """
+        Sets up a Selenium WebDriver instance using undetected-chromedriver, configured
+        to avoid detection on sites with anti-bot measures.
+
+        This method configures Chrome options for stealth browsing, including disabling
+        pop-ups and extensions, and assigning a temporary data path to isolate browser
+        profiles for each session.
+
+        Returns:
+            WebDriver: A configured instance of undetected-chromedriver's Chrome WebDriver.
+        """
+        # this has to be imported separately to avoid circular imports with multiprocessing
         import undetected_chromedriver as uc
+
+        # Set up Chrome options to avoid detection
         options = uc.ChromeOptions()
 
         # Set user data directory to enforce separate profiles
@@ -62,11 +92,12 @@ class GeneralizedScraper:
 
     def random_delay(self, min_seconds=0, max_seconds=1):
         """
-        Mimic human-like random delay.
+        Introduces a random delay to mimic human-like browsing behavior
+        and reduce the likelihood of detection by anti-bot systems.
 
         Args:
-            min_seconds (int): Minimum delay time in seconds.
-            max_seconds (int): Maximum delay time in seconds.
+            min_seconds (int, optional): Minimum delay time in seconds.
+            max_seconds (int, optional): Maximum delay time in seconds.
         """
         time.sleep(random.uniform(min_seconds, max_seconds))
 
@@ -521,7 +552,7 @@ class GeneralizedScraper:
             website_name = self.shopping_website.replace("https://", "").replace("www.", "").split('.')[0]
 
             # Create directory for the specific website inside the 'scraped_data' folder
-            save_dir = os.path.join('scraped_data', website_name, category)
+            save_dir = os.path.join('../scraped_data', website_name, category)
 
             # Create the directory if it doesn't exist
             if not os.path.exists(save_dir):
@@ -658,7 +689,6 @@ class GeneralizedScraper:
             else:
                 break  # Stop after scrolling if pagination is not supported
 
-        print(f"Scraped {self.product_count} products in total.")
         # clear all trash titles after scraping all products on all pages
         self.wrong_titles.clear()
 
@@ -672,12 +702,16 @@ if __name__ == "__main__":
         """Run the new method with scrolling or pagination and save the results."""
         # first we need to open the home page to avoid captcha
         scraper.open_home_page(base_url)
+
         # next we open the search page and start scraping products
         scraper.open_search_url(search_url_template)
+
         # next we scrape all products with scrolling and pagination support if available, later on the first page we would learn parent blocks logic and then we would use it to scrape all products on other pages
         scraper.scrape_all_products(scroll_based=scroll_based, url_template=search_url_template, page_number_supported=page_number_supported)
+
         # just to check how many products we have scraped
         new_method_count = scraper.product_count
+
         # scraper.save_to_csv(csv_file_name)  # Save to the appropriate shop folder
         scraper.close_driver()
         return new_method_count

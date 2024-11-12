@@ -1,88 +1,6 @@
-import os
-import tempfile
-import pandas as pd
-from multiprocessing import Process, Manager, Barrier, set_start_method
-from UniversalWebshopScraper.generalized_scrapper.generalized_scrapper import GeneralizedScraper
-import time
+# product_categories.py
 
-
-def run_scraper(site_info, category, products, detected_image_urls, user_data_dir, worker_id, n_workers, barrier):
-    try:
-        scraper = GeneralizedScraper(shopping_website=site_info["home_url"], user_data_dir=user_data_dir)
-        scraper.detected_image_urls = detected_image_urls  # Use shared list
-
-        if not scraper.open_home_page(site_info["home_url"]):
-            print(f"[ERROR] Worker {worker_id}: Failed to open home page for {site_info['name']}")
-            return
-
-        print(f"***** Worker {worker_id} started for category {category} on {site_info['name']} *****")
-
-        # Split the product list across all workers using worker_id and n_workers
-        product_chunk = products[worker_id::n_workers]
-
-        for product in product_chunk:
-            print(f"Worker {worker_id} searching for product: {product}")
-            search_url = site_info["search_url_template"].format(
-                base_url=site_info["home_url"], query=product.replace(" ", "+"), page_number="{page_number}"
-            )
-
-            scraper.open_search_url(search_url.format(page_number=1))
-            scraper.scrape_all_products(scroll_based=False, url_template=search_url, page_number_supported=True)
-
-        print(f"Worker {worker_id} collected {len(scraper.stored_products)} products for category {category}")
-
-        # Construct the CSV filename using the specified format: batch_N_website_name_category_products
-        csv_filename = f"batch_{worker_id}_{site_info['name']}_{category.replace(' ', '_')}_products.csv"
-
-        # Save the results for this worker using the scraper's save_to_csv method
-        scraper.save_to_csv(save_path=csv_filename, category=category)
-
-    finally:
-        scraper.close_driver()
-        barrier.wait()  # Ensure all workers hit the barrier before closing
-
-
-def main_scraper(site_info, categories_amazon_products, n_workers=2):
-    manager = Manager()
-    detected_image_urls = manager.list()  # Shared list across processes
-
-    for category, products in categories_amazon_products.items():
-        print(f"Starting category: {category}")
-
-        # Create a new barrier for each category to ensure synchronization per category
-        barrier = Barrier(n_workers)
-
-        processes = []
-        for i in range(n_workers):
-            # Create a unique temporary directory for each Chrome instance
-            temp_dir = tempfile.mkdtemp()
-            print(f"[INFO] Created temporary directory for Chrome instance: {temp_dir}")
-
-            process = Process(
-                target=run_scraper,
-                args=(site_info, category, products, detected_image_urls, temp_dir, i, n_workers, barrier)
-            )
-            processes.append(process)
-            process.start()
-
-            time.sleep(4)  # Stagger starts to avoid conflicts
-
-        # Wait for all worker processes to complete this category
-        for process in processes:
-            process.join()
-
-        print(f"Finished category: {category}, moving to the next.")
-
-
-if __name__ == "__main__":
-    set_start_method("spawn", force=True)
-
-    shopping_sites = [
-        {"name": "ebay", "home_url": "https://www.ebay.com",
-         "search_url_template": "{base_url}/sch/i.html?_nkw={query}&_pgn={{page_number}}"}
-    ]
-
-    categories_products = {
+categories_products = {
     "Electronics": [
         "Wireless Bluetooth Earbuds", "4K UHD Smart TV", "Noise-Cancelling Headphones",
         "Portable Power Bank", "Smartphone with Triple Camera", "Smartwatch with Fitness Tracker",
@@ -289,28 +207,28 @@ if __name__ == "__main__":
     ],
 
     "Beauty": [
-    "Face Cream", "Lip Balm", "Body Lotion", "Hair Serum", "Face Mask", "Eyeliner Pen",
-    "Nail Polish", "Makeup Remover", "Hair Mousse", "Blush Powder", "Eyeshadow Palette",
-    "Makeup Brush Set", "Face Scrub", "Hand Cream", "Foundation Liquid", "Lipstick",
-    "Lip Gloss", "Makeup Primer", "Highlighter Stick", "Concealer", "Facial Toner",
-    "Brow Pencil", "Shampoo", "Conditioner", "Hair Oil", "Body Wash", "Fragrance Mist",
-    "Perfume", "Sunblock Lotion", "Tinted Moisturizer", "Facial Cleanser", "Hair Straightener",
-    "Hair Dryer", "Curling Iron", "Face Serum", "Eye Cream", "Makeup Sponge",
-    "Exfoliating Pads", "Face Mist", "Deodorant", "Cuticle Oil", "Hair Spray",
-    "Eyebrow Gel", "Lip Scrub", "Facial Oil", "Sheet Mask", "Facial Roller",
-    "Clay Mask", "Shaving Cream", "Razors", "Beard Oil", "Pore Strips",
-    "Body Scrub", "Hair Mask", "BB Cream", "CC Cream", "Detangling Spray",
-    "Dry Shampoo", "Scalp Scrub", "Hair Clips", "Hairbrush", "Nail File",
-    "Cuticle Trimmer", "False Eyelashes", "Eyelash Curler", "Eyebrow Stencil",
-    "Face Sponge", "Tweezers", "Foot Cream", "Body Butter", "Hair Tie",
-    "Lip Liner", "Face Peeling Gel", "Body Exfoliator", "Hot Rollers",
-    "Hair Extensions", "Leave-in Conditioner", "Heat Protectant Spray", "Nail Buffer",
-    "Lip Plumper", "Body Powder", "Hydrating Mist", "Facial Peel",
-    "Nail Strengthener", "Hair Removal Wax", "Self-Tanner", "Bronzer",
-    "Body Oil", "Antibacterial Soap", "Facial Steamer", "Hair Growth Serum",
-    "Stretch Mark Cream", "Tattoo Balm", "Face Wipes", "Aftershave",
-    "Whitening Strips", "Nail Clippers", "Hair Perfume", "Body Mist",
-    "Makeup Setting Spray", "Makeup Organizer", "Hair Detangler", "Nail Art Kit"
+        "Face Cream", "Lip Balm", "Body Lotion", "Hair Serum", "Face Mask", "Eyeliner Pen",
+        "Nail Polish", "Makeup Remover", "Hair Mousse", "Blush Powder", "Eyeshadow Palette",
+        "Makeup Brush Set", "Face Scrub", "Hand Cream", "Foundation Liquid", "Lipstick",
+        "Lip Gloss", "Makeup Primer", "Highlighter Stick", "Concealer", "Facial Toner",
+        "Brow Pencil", "Shampoo", "Conditioner", "Hair Oil", "Body Wash", "Fragrance Mist",
+        "Perfume", "Sunblock Lotion", "Tinted Moisturizer", "Facial Cleanser", "Hair Straightener",
+        "Hair Dryer", "Curling Iron", "Face Serum", "Eye Cream", "Makeup Sponge",
+        "Exfoliating Pads", "Face Mist", "Deodorant", "Cuticle Oil", "Hair Spray",
+        "Eyebrow Gel", "Lip Scrub", "Facial Oil", "Sheet Mask", "Facial Roller",
+        "Clay Mask", "Shaving Cream", "Razors", "Beard Oil", "Pore Strips",
+        "Body Scrub", "Hair Mask", "BB Cream", "CC Cream", "Detangling Spray",
+        "Dry Shampoo", "Scalp Scrub", "Hair Clips", "Hairbrush", "Nail File",
+        "Cuticle Trimmer", "False Eyelashes", "Eyelash Curler", "Eyebrow Stencil",
+        "Face Sponge", "Tweezers", "Foot Cream", "Body Butter", "Hair Tie",
+        "Lip Liner", "Face Peeling Gel", "Body Exfoliator", "Hot Rollers",
+        "Hair Extensions", "Leave-in Conditioner", "Heat Protectant Spray", "Nail Buffer",
+        "Lip Plumper", "Body Powder", "Hydrating Mist", "Facial Peel",
+        "Nail Strengthener", "Hair Removal Wax", "Self-Tanner", "Bronzer",
+        "Body Oil", "Antibacterial Soap", "Facial Steamer", "Hair Growth Serum",
+        "Stretch Mark Cream", "Tattoo Balm", "Face Wipes", "Aftershave",
+        "Whitening Strips", "Nail Clippers", "Hair Perfume", "Body Mist",
+        "Makeup Setting Spray", "Makeup Organizer", "Hair Detangler", "Nail Art Kit"
     ],
 
     "Garden & Outdoors": [
@@ -377,7 +295,8 @@ if __name__ == "__main__":
         "Swaddle Blanket", "Baby Toothbrush", "Baby Foam Playmat", "Diaper Caddy", "Bottle Sterilizer",
         "Baby Mobile", "Baby Feeding Set", "Infant Mittens", "Baby Safety Helmet", "Baby Food Freezer Tray",
         "Reusable Swim Diapers", "Breastfeeding Cover", "Baby Stroller Organizer", "Baby Travel Bed",
-        "Car Seat Protector", "Babyproofing Corner Guards", "Baby Bath Toys", "Baby Socks Gripper", "Baby Snack Container",
+        "Car Seat Protector", "Babyproofing Corner Guards", "Baby Bath Toys", "Baby Socks Gripper",
+        "Baby Snack Container",
         "Baby Hair Clippers", "Baby Rocker", "Baby Towel Warmer", "Baby Monitor Wall Mount", "Baby Bottle Drying Rack"
     ],
 
@@ -500,53 +419,46 @@ if __name__ == "__main__":
     ],
 
     "Polish Random Products": [
-            "Zestaw do pielęgnacji brody",
-            "Podgrzewacz do wosku",
-            "Śmietnik automatyczny",
-            "Elektryczny młynek do kawy",
-            "Wieszak na ścianę",
-            "Poduszka ortopedyczna",
-            "Organizer na biurko",
-            "Lampka do czytania na biurko",
-            "Zegarek na rękę",
-            "Kubek termiczny",
-            "Torba sportowa",
-            "Zestaw sztućców",
-            "Składana parasolka",
-            "Zamek szyfrowy",
-            "Ręcznik szybkoschnący",
-            "Termometr bezdotykowy",
-            "Lodówka turystyczna",
-            "Koc elektryczny",
-            "Pojemnik na lunch",
-            "Podkładka pod mysz z żelem",
-            "Plecak turystyczny",
-            "Kamera samochodowa",
-            "Elektryczny grill",
-            "Masażer do stóp",
-            "Zestaw wierteł",
-            "Świeca zapachowa",
-            "Sokowirówka",
-            "Waga kuchenna",
-            "Torba na laptopa",
-            "Suszarka do ubrań",
-            "Mata do jogi",
-            "Lusterko kosmetyczne z oświetleniem",
-            "Kubek z zaparzaczem",
-            "Składany stolik na laptopa",
-            "Mop parowy",
-            "Miska dla psa",
-            "Zestaw kieliszków do wina",
-            "Kompresy żelowe na oczy",
-            "Kask rowerowy",
-            "Termos na jedzenie"
-        ]
+        "Zestaw do pielęgnacji brody",
+        "Podgrzewacz do wosku",
+        "Śmietnik automatyczny",
+        "Elektryczny młynek do kawy",
+        "Wieszak na ścianę",
+        "Poduszka ortopedyczna",
+        "Organizer na biurko",
+        "Lampka do czytania na biurko",
+        "Zegarek na rękę",
+        "Kubek termiczny",
+        "Torba sportowa",
+        "Zestaw sztućców",
+        "Składana parasolka",
+        "Zamek szyfrowy",
+        "Ręcznik szybkoschnący",
+        "Termometr bezdotykowy",
+        "Lodówka turystyczna",
+        "Koc elektryczny",
+        "Pojemnik na lunch",
+        "Podkładka pod mysz z żelem",
+        "Plecak turystyczny",
+        "Kamera samochodowa",
+        "Elektryczny grill",
+        "Masażer do stóp",
+        "Zestaw wierteł",
+        "Świeca zapachowa",
+        "Sokowirówka",
+        "Waga kuchenna",
+        "Torba na laptopa",
+        "Suszarka do ubrań",
+        "Mata do jogi",
+        "Lusterko kosmetyczne z oświetleniem",
+        "Kubek z zaparzaczem",
+        "Składany stolik na laptopa",
+        "Mop parowy",
+        "Miska dla psa",
+        "Zestaw kieliszków do wina",
+        "Kompresy żelowe na oczy",
+        "Kask rowerowy",
+        "Termos na jedzenie"
+    ]
 
-    }
-
-    n_workers = 10  # Define the number of workers
-
-    for site_info in shopping_sites:
-        main_scraper(site_info, categories_products, n_workers=n_workers)
-
-    print("***** All searches completed *****")
+}

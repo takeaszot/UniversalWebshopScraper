@@ -2,7 +2,7 @@ import os
 import tempfile
 import pandas as pd
 from multiprocessing import Process, set_start_method
-from UniversalWebshopScraper.generalized_scrapper.generalized_scrapper import GeneralizedScraper
+from UniversalWebshopScraper.generalized_scrapper.core.generalized_scrapper import GeneralizedScraper
 import undetected_chromedriver as uc
 
 # Pre-fetch undetected_chromedriver's executable to avoid parallel downloads
@@ -22,7 +22,7 @@ def run_scraper(site_info, categories_amazon_products):
 
     print(f"***** Starting search on {site_info['name']} *****")
 
-    site_save_path = os.path.join('./scraped_data', site_info["name"].lower())
+    site_save_path = os.path.join('../scraped_data', site_info["name"].lower())
     os.makedirs(site_save_path, exist_ok=True)
 
     for category, products in categories_amazon_products.items():
