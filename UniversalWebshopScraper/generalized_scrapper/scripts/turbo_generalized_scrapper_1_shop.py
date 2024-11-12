@@ -80,6 +80,9 @@ def worker_process(task_queue, status_queue, detected_image_urls, worker_index):
                 # Save the products collected by this worker to CSV.
                 scraper.save_to_csv(save_path=csv_filename, category=category)
 
+                # Clear stored data to prepare for the next category
+                scraper.stored_products.clear()
+
                 # Signal task completion to the main process
                 status_queue.put(('done', worker_index))
 
