@@ -1,11 +1,6 @@
-import os
-import pandas as pd
+# product_categories.py
 
-from UniversalWebshopScraper.generalized_scrapper.generalized_scrapper import GeneralizedScraper
-
-if __name__ == "__main__":
-    # Categories and products to search for
-    categories_amazon_products = {
+categories_products = {
     "Electronics": [
         "Wireless Bluetooth Earbuds", "4K UHD Smart TV", "Noise-Cancelling Headphones",
         "Portable Power Bank", "Smartphone with Triple Camera", "Smartwatch with Fitness Tracker",
@@ -212,28 +207,28 @@ if __name__ == "__main__":
     ],
 
     "Beauty": [
-    "Face Cream", "Lip Balm", "Body Lotion", "Hair Serum", "Face Mask", "Eyeliner Pen",
-    "Nail Polish", "Makeup Remover", "Hair Mousse", "Blush Powder", "Eyeshadow Palette",
-    "Makeup Brush Set", "Face Scrub", "Hand Cream", "Foundation Liquid", "Lipstick",
-    "Lip Gloss", "Makeup Primer", "Highlighter Stick", "Concealer", "Facial Toner",
-    "Brow Pencil", "Shampoo", "Conditioner", "Hair Oil", "Body Wash", "Fragrance Mist",
-    "Perfume", "Sunblock Lotion", "Tinted Moisturizer", "Facial Cleanser", "Hair Straightener",
-    "Hair Dryer", "Curling Iron", "Face Serum", "Eye Cream", "Makeup Sponge",
-    "Exfoliating Pads", "Face Mist", "Deodorant", "Cuticle Oil", "Hair Spray",
-    "Eyebrow Gel", "Lip Scrub", "Facial Oil", "Sheet Mask", "Facial Roller",
-    "Clay Mask", "Shaving Cream", "Razors", "Beard Oil", "Pore Strips",
-    "Body Scrub", "Hair Mask", "BB Cream", "CC Cream", "Detangling Spray",
-    "Dry Shampoo", "Scalp Scrub", "Hair Clips", "Hairbrush", "Nail File",
-    "Cuticle Trimmer", "False Eyelashes", "Eyelash Curler", "Eyebrow Stencil",
-    "Face Sponge", "Tweezers", "Foot Cream", "Body Butter", "Hair Tie",
-    "Lip Liner", "Face Peeling Gel", "Body Exfoliator", "Hot Rollers",
-    "Hair Extensions", "Leave-in Conditioner", "Heat Protectant Spray", "Nail Buffer",
-    "Lip Plumper", "Body Powder", "Hydrating Mist", "Facial Peel",
-    "Nail Strengthener", "Hair Removal Wax", "Self-Tanner", "Bronzer",
-    "Body Oil", "Antibacterial Soap", "Facial Steamer", "Hair Growth Serum",
-    "Stretch Mark Cream", "Tattoo Balm", "Face Wipes", "Aftershave",
-    "Whitening Strips", "Nail Clippers", "Hair Perfume", "Body Mist",
-    "Makeup Setting Spray", "Makeup Organizer", "Hair Detangler", "Nail Art Kit"
+        "Face Cream", "Lip Balm", "Body Lotion", "Hair Serum", "Face Mask", "Eyeliner Pen",
+        "Nail Polish", "Makeup Remover", "Hair Mousse", "Blush Powder", "Eyeshadow Palette",
+        "Makeup Brush Set", "Face Scrub", "Hand Cream", "Foundation Liquid", "Lipstick",
+        "Lip Gloss", "Makeup Primer", "Highlighter Stick", "Concealer", "Facial Toner",
+        "Brow Pencil", "Shampoo", "Conditioner", "Hair Oil", "Body Wash", "Fragrance Mist",
+        "Perfume", "Sunblock Lotion", "Tinted Moisturizer", "Facial Cleanser", "Hair Straightener",
+        "Hair Dryer", "Curling Iron", "Face Serum", "Eye Cream", "Makeup Sponge",
+        "Exfoliating Pads", "Face Mist", "Deodorant", "Cuticle Oil", "Hair Spray",
+        "Eyebrow Gel", "Lip Scrub", "Facial Oil", "Sheet Mask", "Facial Roller",
+        "Clay Mask", "Shaving Cream", "Razors", "Beard Oil", "Pore Strips",
+        "Body Scrub", "Hair Mask", "BB Cream", "CC Cream", "Detangling Spray",
+        "Dry Shampoo", "Scalp Scrub", "Hair Clips", "Hairbrush", "Nail File",
+        "Cuticle Trimmer", "False Eyelashes", "Eyelash Curler", "Eyebrow Stencil",
+        "Face Sponge", "Tweezers", "Foot Cream", "Body Butter", "Hair Tie",
+        "Lip Liner", "Face Peeling Gel", "Body Exfoliator", "Hot Rollers",
+        "Hair Extensions", "Leave-in Conditioner", "Heat Protectant Spray", "Nail Buffer",
+        "Lip Plumper", "Body Powder", "Hydrating Mist", "Facial Peel",
+        "Nail Strengthener", "Hair Removal Wax", "Self-Tanner", "Bronzer",
+        "Body Oil", "Antibacterial Soap", "Facial Steamer", "Hair Growth Serum",
+        "Stretch Mark Cream", "Tattoo Balm", "Face Wipes", "Aftershave",
+        "Whitening Strips", "Nail Clippers", "Hair Perfume", "Body Mist",
+        "Makeup Setting Spray", "Makeup Organizer", "Hair Detangler", "Nail Art Kit"
     ],
 
     "Garden & Outdoors": [
@@ -300,7 +295,8 @@ if __name__ == "__main__":
         "Swaddle Blanket", "Baby Toothbrush", "Baby Foam Playmat", "Diaper Caddy", "Bottle Sterilizer",
         "Baby Mobile", "Baby Feeding Set", "Infant Mittens", "Baby Safety Helmet", "Baby Food Freezer Tray",
         "Reusable Swim Diapers", "Breastfeeding Cover", "Baby Stroller Organizer", "Baby Travel Bed",
-        "Car Seat Protector", "Babyproofing Corner Guards", "Baby Bath Toys", "Baby Socks Gripper", "Baby Snack Container",
+        "Car Seat Protector", "Babyproofing Corner Guards", "Baby Bath Toys", "Baby Socks Gripper",
+        "Baby Snack Container",
         "Baby Hair Clippers", "Baby Rocker", "Baby Towel Warmer", "Baby Monitor Wall Mount", "Baby Bottle Drying Rack"
     ],
 
@@ -423,103 +419,46 @@ if __name__ == "__main__":
     ],
 
     "Polish Random Products": [
-            "Zestaw do pielęgnacji brody",
-            "Podgrzewacz do wosku",
-            "Śmietnik automatyczny",
-            "Elektryczny młynek do kawy",
-            "Wieszak na ścianę",
-            "Poduszka ortopedyczna",
-            "Organizer na biurko",
-            "Lampka do czytania na biurko",
-            "Zegarek na rękę",
-            "Kubek termiczny",
-            "Torba sportowa",
-            "Zestaw sztućców",
-            "Składana parasolka",
-            "Zamek szyfrowy",
-            "Ręcznik szybkoschnący",
-            "Termometr bezdotykowy",
-            "Lodówka turystyczna",
-            "Koc elektryczny",
-            "Pojemnik na lunch",
-            "Podkładka pod mysz z żelem",
-            "Plecak turystyczny",
-            "Kamera samochodowa",
-            "Elektryczny grill",
-            "Masażer do stóp",
-            "Zestaw wierteł",
-            "Świeca zapachowa",
-            "Sokowirówka",
-            "Waga kuchenna",
-            "Torba na laptopa",
-            "Suszarka do ubrań",
-            "Mata do jogi",
-            "Lusterko kosmetyczne z oświetleniem",
-            "Kubek z zaparzaczem",
-            "Składany stolik na laptopa",
-            "Mop parowy",
-            "Miska dla psa",
-            "Zestaw kieliszków do wina",
-            "Kompresy żelowe na oczy",
-            "Kask rowerowy",
-            "Termos na jedzenie"
-        ]
-
-    }
-
-    home_url_amazon = "https://www.amazon.com"
-
-    # Define the list of shopping websites and their search URL templates
-    shopping_sites = [
-        {
-            "name": "Amazon",
-            "home_url": home_url_amazon,
-            "search_url_template": "{base_url}/s?k={query}&page={page_number}"
-        }
+        "Zestaw do pielęgnacji brody",
+        "Podgrzewacz do wosku",
+        "Śmietnik automatyczny",
+        "Elektryczny młynek do kawy",
+        "Wieszak na ścianę",
+        "Poduszka ortopedyczna",
+        "Organizer na biurko",
+        "Lampka do czytania na biurko",
+        "Zegarek na rękę",
+        "Kubek termiczny",
+        "Torba sportowa",
+        "Zestaw sztućców",
+        "Składana parasolka",
+        "Zamek szyfrowy",
+        "Ręcznik szybkoschnący",
+        "Termometr bezdotykowy",
+        "Lodówka turystyczna",
+        "Koc elektryczny",
+        "Pojemnik na lunch",
+        "Podkładka pod mysz z żelem",
+        "Plecak turystyczny",
+        "Kamera samochodowa",
+        "Elektryczny grill",
+        "Masażer do stóp",
+        "Zestaw wierteł",
+        "Świeca zapachowa",
+        "Sokowirówka",
+        "Waga kuchenna",
+        "Torba na laptopa",
+        "Suszarka do ubrań",
+        "Mata do jogi",
+        "Lusterko kosmetyczne z oświetleniem",
+        "Kubek z zaparzaczem",
+        "Składany stolik na laptopa",
+        "Mop parowy",
+        "Miska dla psa",
+        "Zestaw kieliszków do wina",
+        "Kompresy żelowe na oczy",
+        "Kask rowerowy",
+        "Termos na jedzenie"
     ]
 
-    save_path = "./scraped_data"
-    os.makedirs(save_path, exist_ok=True)
-
-    for site_info in shopping_sites:
-        site_name = site_info["name"].lower()
-        scraper = GeneralizedScraper(shopping_website=site_info["home_url"])
-        scraper.open_home_page(site_info["home_url"])
-        print(f"***** Starting search on {site_name} *****")
-
-        # Directory for the specific site
-        site_save_path = os.path.join(save_path, site_name)
-        os.makedirs(site_save_path, exist_ok=True)
-
-        # Loop through each category and product
-        for category, products in categories_amazon_products.items():
-            print(f"--- Searching category: {category} ---")
-            category_start_count = scraper.product_count
-
-            for product in products:
-                product_start_count = scraper.product_count
-                print(f"Searching for product: {product}")
-                search_url = site_info["search_url_template"].format(
-                    base_url=home_url_amazon, query=product.replace(" ", "+"), page_number="{page_number}")
-
-                scraper.open_search_url(search_url.format(page_number=1))
-                scraper.scrape_all_products(scroll_based=False, url_template=search_url, page_number_supported=True)
-
-            # Calculate the number of products scraped for this category
-            category_product_count = scraper.product_count - category_start_count
-            print(f"Found {category_product_count} new products in the category: {category}")
-
-            # Save collected products to a CSV for this category
-            category = category.replace(" & ", "_").replace(" ", "_")
-            save_path = os.path.join(site_save_path, f"{category}.csv")
-            print(f"Saving products to: {save_path}")
-            df = pd.DataFrame(scraper.stored_products)
-            df.to_csv(save_path, index=False)
-
-            # after saving we should clear the products list
-            scraper.stored_products = []
-
-        scraper.close_driver()
-        print('*' * 69)
-
-    print("***** All searches completed *****")
+}
