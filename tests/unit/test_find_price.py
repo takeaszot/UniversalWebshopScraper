@@ -41,6 +41,7 @@ def scraper():
         ),
     ],
 )
+
 def test_find_price(scraper, html_input, expected_price):
     """
     Test the find_price function from GeneralizedScraper.
