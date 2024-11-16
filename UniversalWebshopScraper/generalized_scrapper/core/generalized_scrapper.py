@@ -8,6 +8,8 @@ import os
 from line_profiler import profile
 from collections import defaultdict
 import tempfile
+import undetected_chromedriver as uc
+from selenium.webdriver.common.by import By
 
 from UniversalWebshopScraper.generalized_scrapper.core.functions import normalize_price, normalize_url
 
@@ -32,7 +34,7 @@ class GeneralizedScraper:
         user_data_dir (str, optional): The directory path for storing user data, allowing
                                        persistence of session information between scrapes.
     """
-    def __init__(self, shopping_website=None, user_data_dir=None):
+    def __init__(self, shopping_website=None, user_data_dir=None, offline_mode=False):
         """
          Initializes the GeneralizedScraper instance with necessary attributes
          for web scraping operations.
@@ -48,7 +50,10 @@ class GeneralizedScraper:
          """
         self.shopping_website = shopping_website  # The URL of the shopping website
         self.user_data_dir = user_data_dir  # Directory for storing user data
-        self.driver = self.initialize_driver()  # Initialize the Chrome WebDriver
+        if offline_mode:
+            self.driver = None
+        else:
+            self.driver = self.initialize_driver()  # Initialize the Chrome WebDriver
         self.marked_blocks = set()  # Set to store marked blocks
         self.detected_products = set()  # Set to store detected products
         self.wrong_titles = set()  # Set to store detected titles
@@ -59,6 +64,21 @@ class GeneralizedScraper:
         self.stored_products = []  # List to store gathered products (dict format)
 
     def initialize_driver(self):
+        """
+        Initialize the Chrome driver with necessary options for avoiding CAPTCHA detection.
+        Returns:
+            driver: The initialized Chrome driver with customized options.
+        """
+        options = uc.ChromeOptions()
+        user_data_dir = r"C:\Users\<YourUsername>\AppData\Local\Google\Chrome\User Data"
+        profile = "Profile 1"
+        options.add_argument(f"user-data-dir={user_data_dir}")
+        options.add_argument(f"profile-directory={profile}")
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        driver = uc.Chrome(options=options)
+        return driver
+
+    '''def initialize_driver(self):
         """
         Sets up a Selenium WebDriver instance using undetected-chromedriver, configured
         to avoid detection on sites with anti-bot measures.
@@ -88,9 +108,9 @@ class GeneralizedScraper:
 
         # Initialize Chrome driver with the specified options and unique data_path
         driver = uc.Chrome(options=options, user_data_dir=temp_data_path)
-        return driver
+        return driver'''
 
-    def random_delay(self, min_seconds=0, max_seconds=1):
+    def random_delay(self, min_seconds=1, max_seconds=2):
         """
         Introduces a random delay to mimic human-like browsing behavior
         and reduce the likelihood of detection by anti-bot systems.
@@ -235,6 +255,7 @@ class GeneralizedScraper:
         Args:
             soup (BeautifulSoup): Parsed HTML of the page.
         """
+        product_scraped = 0
 
         # Step 1: Identify all potential blocks that might contain product information.
         # We look for common HTML tags used to wrap products on e-commerce websites.
@@ -245,7 +266,7 @@ class GeneralizedScraper:
         blocks.sort(key=lambda x: len(list(x.parents)), reverse=True)
 
         # how many block
-        # print(f"Number of blocks: {len(blocks)}")
+        #print(f"Number of blocks: {len(blocks)}")
 
         # Step 3: Iterate through each block to identify and process those containing product data.
         for block in blocks:
@@ -283,7 +304,7 @@ class GeneralizedScraper:
 
             for url in image_urls:
                 if url not in self.detected_image_urls:
-                    self.detected_image_urls.append(url)
+                    self.detected_image_urls.add(url)
 
             # Step 9: Store the product data in a list, ready for future saving to CSV or other storage.
             self.store_product(product_url, image_url, price, currency, title)
@@ -294,7 +315,7 @@ class GeneralizedScraper:
 
             # Step 11: Print detected product details for debugging and monitoring.
             # These prints help verify that scraping is working as intended.
-            '''print(f"Detected parent block:\n{str(block).split('>')[0]}>")
+            print(f"Detected parent block:\n{str(block).split('>')[0]}>")
             print("\n--- Detected Product Block ---")
             print(f"Website: {self.shopping_website}")
             print(f"Product URL: {product_url}")
@@ -314,10 +335,13 @@ class GeneralizedScraper:
             for url in image_urls:
                 print(f"{url}\n")
 
-            print("--- End of Product Block ---\n")'''
+            print("--- End of Product Block ---\n")
 
             # Step 12: Increment the product count after successfully processing a product block.
             self.product_count += 1
+            product_scraped += 1
+
+        print(f"Number of products scraped: {product_scraped}")
 
     @profile
     def extract_product_info(self, block):
@@ -446,8 +470,10 @@ class GeneralizedScraper:
         Returns:
             str: The maximum price found in the price tags.
         """
+
         max_price_tag = price_tags[0]
         max_price = price_tags[0][0] if price_tags[0][0] else price_tags[0][3]
+        print(f"Raw price before normalization: {max_price}")
         max_price = float(normalize_price(max_price))
 
         for pt in price_tags:
@@ -579,32 +605,34 @@ class GeneralizedScraper:
         if self.driver:
             self.driver.quit()
 
-    def scroll_to_bottom(self, max_scrolls=10, scroll_pause_time=1):
+    def incremental_scroll_with_html_check(self, max_scrolls=10, scroll_pause_time=2):
         """
-        Scroll down the page a set number of times to load more products.
+        Scroll incrementally and check if more HTML is being loaded.
 
         Args:
-            max_scrolls (int): Maximum number of scrolls.
+            max_scrolls (int): Maximum number of scroll attempts.
             scroll_pause_time (int): Pause time between scrolls in seconds.
         """
+        last_page_source = self.driver.page_source  # Initial page source for comparison
 
-        last_height = self.driver.execute_script("return document.body.scrollHeight")
+        for scroll in range(max_scrolls):
+            # Scroll down incrementally
+            self.driver.execute_script("window.scrollBy(0, 2400);")
+            time.sleep(scroll_pause_time)
 
-        for i in range(max_scrolls):
-            # Scroll to the bottom of the page
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            self.random_delay(scroll_pause_time, scroll_pause_time + 2)
+            # Get the current page source and compare with the last
+            current_page_source = self.driver.page_source
 
-            # Wait for new content to load
-            new_height = self.driver.execute_script("return document.body.scrollHeight")
-
-            # Break if the page height hasn't changed, meaning no new content
-            if new_height == last_height:
+            if current_page_source == last_page_source:
+                print(f"Scroll {scroll + 1}: No additional HTML loaded. Stopping.")
                 break
+            else:
+                print(f"Scroll {scroll + 1}: Additional HTML detected.")
 
-            last_height = new_height
+            # Update the last page source
+            last_page_source = current_page_source
 
-        # print(f"Scrolled {i + 1} times")
+        print("Finished scrolling.")
 
     # detect of not interesting blocks
     def trash_detection(self, soup):
@@ -636,12 +664,12 @@ class GeneralizedScraper:
         self.wrong_titles = {string for string, count in string_occurrences.items() if count >= threshold}
 
         # Optional: Print out detected "trash" strings for debugging, each on a new line
-        #print("Detected non-interesting (trash) titles:")
-        #for title in self.wrong_titles:
-        #    print(title)
+        # print("Detected non-interesting (trash) titles:")
+        # for title in self.wrong_titles:
+        #     print(title)
 
     @profile
-    def scrape_all_products(self, scroll_based=False, max_pages=25, max_scrolls=2, url_template=None,
+    def scrape_all_products(self, scroll_based=False, max_pages=99, max_scrolls=10, url_template=None,
                             page_number_supported=True):
         """
         Scrape all products using pagination and scrolling if enabled.
@@ -656,7 +684,7 @@ class GeneralizedScraper:
 
         page_count = 1
         while page_count <= max_pages:
-            # print(f"Scraping page {page_count}")
+            print(f"Scraping page {page_count}")
 
             # Load the current page using pagination if supported
             if page_number_supported and url_template:
@@ -666,7 +694,7 @@ class GeneralizedScraper:
 
             # Scroll down the page if scroll_based is True
             if scroll_based:
-                self.scroll_to_bottom(max_scrolls)  # Scroll down to load more products on the current page
+                self.incremental_scroll_with_html_check(max_scrolls)  # Scroll down to load more products on the current page
 
             # Extract product blocks after scrolling
             soup = self.extract_page_structure()
@@ -675,6 +703,10 @@ class GeneralizedScraper:
             if page_count == 1:
                 self.trash_detection(soup)
 
+            # number of product before scraping
+            helper = self.product_count
+
+            # Detect product blocks on the page
             self.detect_product_blocks(soup)
 
             # how many marked blocks we have
@@ -682,6 +714,12 @@ class GeneralizedScraper:
 
             # clear marked blocks
             self.marked_blocks.clear()
+
+            # if we dont scrap anything we move to next product ie number of product is same as before
+            if page_count > 3:
+                if helper == self.product_count:
+                    print("No more products to scrape")
+                    break
 
             # Handle pagination if supported, otherwise just scroll and stop
             if page_number_supported:
@@ -716,6 +754,23 @@ if __name__ == "__main__":
         scraper.close_driver()
         return new_method_count
 
+    ### Test Aliexpress (scroll-based) ###
+    home_url_aliexpress = "https://www.aliexpress.com"
+    aliexpress_search_url_template = "{home_url}/w/wholesale-{query}.html?page={{page_number}}".format(home_url=home_url_aliexpress, query=search_query.replace(" ", "+"))
+
+    scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
+    new_aliexpress_count = run_new_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products_new.csv', scroll_based=True, page_number_supported=True)
+    print(f"New Aliexpress product count: {new_aliexpress_count}")
+
+    ### Test Temu (scroll-based) ###
+    home_url_temu = "https://www.temu.com"
+    temu_search_url_template = "{base_url}/search_result.html?search_key={query}&search_method=user".format(
+        base_url=home_url_temu, query=search_query.replace(" ", "+"))
+
+    scraper = GeneralizedScraper(shopping_website=home_url_temu)
+    new_temu_count = run_new_method(scraper, temu_search_url_template, home_url_temu, 'temu_products_new.csv', scroll_based=True, page_number_supported=False)
+    print(f"New Temu product count: {new_temu_count}")
+
     ### Test Allegro (pagination-based) ###
     home_url_allegro = "https://www.allegro.pl"
     # Corrected URL template with double curly braces for page_number
@@ -742,15 +797,6 @@ if __name__ == "__main__":
     scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
     new_aliexpress_count = run_new_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products_new.csv', scroll_based=True, page_number_supported=True)
     print(f"New Aliexpress product count: {new_aliexpress_count}")
-
-    ### Test Temu (scroll-based) ###
-    home_url_temu = "https://www.temu.com"
-    temu_search_url_template = "{base_url}/search_result.html?search_key={query}&search_method=user".format(
-        base_url=home_url_temu, query=search_query.replace(" ", "+"))
-
-    scraper = GeneralizedScraper(shopping_website=home_url_temu)
-    new_temu_count = run_new_method(scraper, temu_search_url_template, home_url_temu, 'temu_products_new.csv', scroll_based=True, page_number_supported=False)
-    print(f"New Temu product count: {new_temu_count}")
 
     ### Test Amazon (pagination-based) ###
     home_url_amazon = "https://www.amazon.com"

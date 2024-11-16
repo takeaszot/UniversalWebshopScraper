@@ -1,5 +1,6 @@
 import pytest
-from agents.generalized_scrapper.generalized_scrapper import normalize_price, normalize_url
+from UniversalWebshopScraper.generalized_scrapper.core.generalized_scrapper import GeneralizedScraper
+from UniversalWebshopScraper.generalized_scrapper.core.functions import normalize_price, normalize_url
 
 # Test cases for normalize_price
 @pytest.mark.parametrize("input_price, expected_output", [

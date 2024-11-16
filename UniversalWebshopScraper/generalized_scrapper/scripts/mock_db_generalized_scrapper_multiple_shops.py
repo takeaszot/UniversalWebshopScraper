@@ -49,6 +49,7 @@ if __name__ == "__main__":
     set_start_method("spawn", force=True)
 
     shopping_sites = [
+        {"name": "aliexpress", "home_url": "https://www.aliexpress.com", "search_url_template": '{base_url}/w/wholesale-{query}.html?page={{page_number}}'},
         {"name": "temu", "home_url": "https://www.temu.com", "search_url_template": "{base_url}/search_result.html?search_key={query}&search_method=user"},
         {"name": "ebay", "home_url": "https://www.ebay.com", "search_url_template": "{base_url}/sch/i.html?_nkw={query}&_pgn={{page_number}}"},
         {"name": "amazon", "home_url": "https://www.amazon.com", "search_url_template": "{base_url}/s?k={query}&page={page_number}"}

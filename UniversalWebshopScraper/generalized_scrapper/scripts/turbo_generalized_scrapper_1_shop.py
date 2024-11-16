@@ -239,16 +239,14 @@ if __name__ == "__main__":
     set_start_method("spawn", force=True)
 
     shopping_sites = [
-        {
-            "name": "ebay",
-            "home_url": "https://www.ebay.com",
-            "search_url_template": "{base_url}/sch/i.html?_nkw={query}&_pgn={{page_number}}"
-        }
+        {"name": "aliexpress",
+         "home_url": "https://www.aliexpress.com",
+         "search_url_template": '{base_url}/w/wholesale-{query}.html?page={{page_number}}'},
     ]
 
     from UniversalWebshopScraper.generalized_scrapper.core.product_categories import categories_products
 
-    n_workers = 10  # Define the number of workers
+    n_workers = 4  # Define the number of workers
 
     for site_info in shopping_sites:
         main_scraper(site_info, categories_products, n_workers=n_workers)
