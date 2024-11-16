@@ -473,7 +473,6 @@ class GeneralizedScraper:
 
         max_price_tag = price_tags[0]
         max_price = price_tags[0][0] if price_tags[0][0] else price_tags[0][3]
-        print(f"Raw price before normalization: {max_price}")
         max_price = float(normalize_price(max_price))
 
         for pt in price_tags:
