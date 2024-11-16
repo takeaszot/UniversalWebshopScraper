@@ -10,6 +10,8 @@ from collections import defaultdict
 import tempfile
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
+import re
+from bs4 import BeautifulSoup, Tag
 
 from UniversalWebshopScraper.generalized_scrapper.core.functions import normalize_price, normalize_url
 
@@ -19,9 +21,10 @@ from UniversalWebshopScraper.generalized_scrapper.core.functions import normaliz
 """
 
 # Define the patterns for detecting prices and currencies should work for all currencies and prices with or without commas
-CURRENCY_PATTER = r"(\$|€|£|zł|PLN|USD|GBP|JPY|AUD)"
+CURRENCY_PATTERN = r"(\$|€|£|zł|PLN|USD|GBP|JPY|AUD)"
 PRICE_PATTERN = r"(\d+(?:[.,]\d{3})*(?:[.,]\d\d))"
-COST_PATTERN = f"{PRICE_PATTERN}\s*{CURRENCY_PATTER}|{CURRENCY_PATTER}\s*{PRICE_PATTERN}"
+COST_PATTERN = f"{PRICE_PATTERN}\s*{CURRENCY_PATTERN}|{CURRENCY_PATTERN}\s*{PRICE_PATTERN}"
+
 
 class GeneralizedScraper:
     """
