@@ -14,10 +14,15 @@ def scraper():
 @pytest.mark.parametrize(
     "html_input, expected_price",
     [
-        # Test case 1: Single block with a price
+        # Test case 1a: Single block with a price
         (
             """<div><span>100</span><span>.99</span><span>$</span></div>""",
             "100.99$"
+        ),
+        # Test case 1a: Single block with a price
+        (
+            """<div><span>1</span><span>.99</span><span>$</span></div>""",
+            "1.99$"
         ),
         # Test case 2a: Noise text with price
         (
@@ -26,13 +31,18 @@ def scraper():
         ),
         # Test case 2b: Noise text with price
         (
-                """<div><span>Inteligentne zegarki Fitness Tracker IP 68.</span><span>100</span><span>$</span></div>""",
-                "100$"
+            """<div><span>Inteligentne zegarki Fitness Tracker IP 68.</span><span>100</span><span>$</span></div>""",
+            "100$"
         ),
         # Test case 2c: Noise text with price
         (
-                """<div><span>Inteligentne zegarki Fitness Tracker IP 68</span><span>100</span><span>$</span></div>""",
-                "100$"
+            """<div><span>Inteligentne zegarki Fitness Tracker IP 68</span><span>100</span><span>$</span></div>""",
+            "100$"
+        ),
+        # Test case 2d: Noise text with price
+        (
+            """<div><span>Inteligentne zegarki Fitness Tracker IP 68,</span><span>1.000,99</span><span>$</span></div>""",
+            "1.000,99$"
         ),
         # Test case 3: Complex price format
         (
