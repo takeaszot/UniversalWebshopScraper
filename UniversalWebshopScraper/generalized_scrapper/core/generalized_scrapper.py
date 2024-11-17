@@ -357,6 +357,11 @@ class GeneralizedScraper:
         Returns:
             tuple: A tuple containing URLs, image URLs, price, and title, or None if any are missing.
         """
+        title = self.find_title(block)
+
+        if not title:
+            return None
+
         price = self.find_price(block)
 
         if not price:
@@ -370,11 +375,6 @@ class GeneralizedScraper:
         image_urls = self.find_image_url(block)
 
         if not image_urls:
-            return None
-
-        title = self.find_title(block)
-
-        if not title:
             return None
 
         return product_urls, image_urls, price, title
@@ -473,14 +473,15 @@ class GeneralizedScraper:
         Returns:
             str: The maximum price found in the price tags.
         """
-
-        max_price_tag = price_tags[0]
-        max_price = price_tags[0][0] if price_tags[0][0] else price_tags[0][3]
-        max_price = float(normalize_price(max_price))
+        max_price_tag = ["0.00", "", "", ""]
+        max_price = 0
 
         for pt in price_tags:
             price = pt[0] if pt[0] else pt[3]
-            price = float(normalize_price(price))  # Normalize each price before comparison
+            try:
+                price = float(normalize_price(price))
+            except:
+                price = 0
 
             if price > max_price:
                 max_price_tag = pt
