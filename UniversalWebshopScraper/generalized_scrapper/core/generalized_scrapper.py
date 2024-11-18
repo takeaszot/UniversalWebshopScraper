@@ -241,6 +241,12 @@ class GeneralizedScraper:
             bool: True if the page opened successfully, False otherwise.
         """
         try:
+            soup = self.extract_page_structure()
+            if self.is_captcha_present(soup):
+                input("Resolve Captcha and click enter button")
+            return True
+
+
             self.driver.get(home_url)
             self.random_delay()
             soup = self.extract_page_structure()
@@ -262,9 +268,18 @@ class GeneralizedScraper:
             bool: True if the page opened successfully, False otherwise.
         """
         try:
+            # check if we have captcha
+            soup = self.extract_page_structure()
+            if self.is_captcha_present(soup):
+                input("Resolve Captcha and click enter button")
+            return True
+
+            # open the search URL
             self.driver.get(search_url.format(page_number=1))
             self.random_delay()
             soup = self.extract_page_structure()
+
+            # check if we have captcha
             if self.is_captcha_present(soup):
                 input("Resolve Captcha and click enter button")
             return True
