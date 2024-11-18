@@ -66,22 +66,23 @@ class GeneralizedScraper:
         self.product_count = 0  # Counter for the number of products detected
         self.stored_products = []  # List to store gathered products (dict format)
 
-    def initialize_driver(self):
+    '''def initialize_driver(self):
         """
         Initialize the Chrome driver with necessary options for avoiding CAPTCHA detection.
         Returns:
             driver: The initialized Chrome driver with customized options.
         """
         options = uc.ChromeOptions()
-        user_data_dir = r"C:\Users\<YourUsername>\AppData\Local\Google\Chrome\User Data"
-        profile = "Profile 1"
+        user_data_dir = 
+        profile = "Profile 2"
         options.add_argument(f"user-data-dir={user_data_dir}")
         options.add_argument(f"profile-directory={profile}")
         options.add_argument('--disable-blink-features=AutomationControlled')
         driver = uc.Chrome(options=options)
-        return driver
+        return driver'''
+    # r"C:\Users\<YourUsername>\AppData\Local\Google\Chrome\User Data"
 
-    '''def initialize_driver(self):
+    def initialize_driver(self):
         """
         Sets up a Selenium WebDriver instance using undetected-chromedriver, configured
         to avoid detection on sites with anti-bot measures.
@@ -111,9 +112,9 @@ class GeneralizedScraper:
 
         # Initialize Chrome driver with the specified options and unique data_path
         driver = uc.Chrome(options=options, user_data_dir=temp_data_path)
-        return driver'''
+        return driver
 
-    def random_delay(self, min_seconds=1, max_seconds=2):
+    def random_delay(self, min_seconds=0, max_seconds=1):
         """
         Introduces a random delay to mimic human-like browsing behavior
         and reduce the likelihood of detection by anti-bot systems.
@@ -134,8 +135,9 @@ class GeneralizedScraper:
         Returns:
             bool: True if CAPTCHA is detected, False otherwise.
         """
-        # TODO maybe this need to be improved
-        # Define common CAPTCHA selectors
+        import re
+
+        # Define common CAPTCHA selectors (updated for AliExpress-specific elements)
         captcha_selectors = [
             {'id': re.compile(r'captcha', re.I)},
             {'class': re.compile(r'captcha', re.I)},
@@ -147,6 +149,11 @@ class GeneralizedScraper:
             {'class': re.compile(r'h-captcha', re.I)},
             {'class': re.compile(r'arkose', re.I)},  # For Arkose Labs
             {'class': re.compile(r'cf-captcha', re.I)},  # For Cloudflare captchas
+            # AliExpress-specific selectors
+            {'id': re.compile(r'nocaptcha', re.I)},  # Specific ID for AliExpress CAPTCHA
+            {'class': re.compile(r'baxia-punish', re.I)},  # AliExpress punish page
+            {'id': re.compile(r'nc_\d+_nocaptcha', re.I)},  # NoCaptcha module
+            {'class': re.compile(r'nc-container', re.I)},  # NoCaptcha container
         ]
 
         # Check for elements matching the CAPTCHA selectors
@@ -162,7 +169,7 @@ class GeneralizedScraper:
                 print("CAPTCHA detected in an iframe.")
                 return True
 
-        # Optionally, check for CAPTCHA keywords in form actions or JavaScript
+        # Check for CAPTCHA keywords in form actions or JavaScript
         forms = soup.find_all('form', action=True)
         for form in forms:
             if re.search(r'captcha', form['action'], re.I):
@@ -173,6 +180,19 @@ class GeneralizedScraper:
         for script in scripts:
             if re.search(r'captcha', script['src'], re.I):
                 print("CAPTCHA detected in script source.")
+                return True
+
+        # Check for common CAPTCHA messages in text content
+        text_indicators = [
+            "Please slide to verify",  # AliExpress NoCaptcha prompt
+            "unusual traffic",  # Generic unusual traffic message
+            "Sorry, we have detected unusual traffic",  # AliExpress-specific message
+            "prove you're not a robot",  # Generic CAPTCHA message
+        ]
+
+        for text in text_indicators:
+            if soup.body and text in soup.body.get_text(strip=True):
+                print(f"CAPTCHA detected based on text content: '{text}'")
                 return True
 
         # If none of the CAPTCHA indicators are found, assume no CAPTCHA is present
@@ -191,9 +211,9 @@ class GeneralizedScraper:
         try:
             self.driver.get(home_url)
             self.random_delay()
-            #soup = self.extract_page_structure()
-            #if self.is_captcha_present(soup):
-            #    input("Resolve Captcha and click enter button")
+            soup = self.extract_page_structure()
+            if self.is_captcha_present(soup):
+                input("Resolve Captcha and click enter button")
             return True
         except Exception as e:
             print(f"Failed to navigate to the product URL: {e}")
@@ -213,8 +233,8 @@ class GeneralizedScraper:
             self.driver.get(search_url.format(page_number=1))
             self.random_delay()
             soup = self.extract_page_structure()
-            ##if self.is_captcha_present(soup):
-            #    input("Resolve Captcha and click enter button")
+            if self.is_captcha_present(soup):
+                input("Resolve Captcha and click enter button")
             return True
         except Exception as e:
             print(f"Failed to navigate to the product URL: {e}")
@@ -307,7 +327,7 @@ class GeneralizedScraper:
 
             for url in image_urls:
                 if url not in self.detected_image_urls:
-                    self.detected_image_urls.add(url)
+                    self.detected_image_urls.append(url)
 
             # Step 9: Store the product data in a list, ready for future saving to CSV or other storage.
             self.store_product(product_url, image_url, price, currency, title)
@@ -318,7 +338,7 @@ class GeneralizedScraper:
 
             # Step 11: Print detected product details for debugging and monitoring.
             # These prints help verify that scraping is working as intended.
-            print(f"Detected parent block:\n{str(block).split('>')[0]}>")
+            '''print(f"Detected parent block:\n{str(block).split('>')[0]}>")
             print("\n--- Detected Product Block ---")
             print(f"Website: {self.shopping_website}")
             print(f"Product URL: {product_url}")
@@ -338,7 +358,7 @@ class GeneralizedScraper:
             for url in image_urls:
                 print(f"{url}\n")
 
-            print("--- End of Product Block ---\n")
+            print("--- End of Product Block ---\n")'''
 
             # Step 12: Increment the product count after successfully processing a product block.
             self.product_count += 1
@@ -608,20 +628,37 @@ class GeneralizedScraper:
         if self.driver:
             self.driver.quit()
 
-    def incremental_scroll_with_html_check(self, max_scrolls=10, scroll_pause_time=2):
+    def simulate_mouse_movement(self):
+        """
+        Simulates a mouse movement event to mimic user activity.
+        This can help keep the session active and bypass bot detection.
+        """
+        try:
+            self.driver.execute_script("""
+                const evt = new MouseEvent('mousemove', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window
+                });
+                document.dispatchEvent(evt);
+            """)
+        except Exception as e:
+            print(f"Failed to simulate mouse movement: {e}")
+
+    def incremental_scroll_with_html_check(self, max_scrolls=10, scroll_pause_time=1):
         """
         Scroll incrementally and check if more HTML is being loaded.
-
-        Args:
-            max_scrolls (int): Maximum number of scroll attempts.
-            scroll_pause_time (int): Pause time between scrolls in seconds.
+        Simulates mouse movement to mimic user interaction.
         """
         last_page_source = self.driver.page_source  # Initial page source for comparison
 
         for scroll in range(max_scrolls):
             # Scroll down incrementally
-            self.driver.execute_script("window.scrollBy(0, 2400);")
+            self.driver.execute_script("window.scrollBy(0, 800);")
             time.sleep(scroll_pause_time)
+
+            # Simulate user activity to keep the session active
+            self.simulate_mouse_movement()
 
             # Get the current page source and compare with the last
             current_page_source = self.driver.page_source
@@ -645,6 +682,7 @@ class GeneralizedScraper:
         Args:
             soup (BeautifulSoup): Parsed HTML of the page.
         """
+        # todo add all imgs urls that are more than 2 times on the page
         # Dictionary to store counts of unique strings across blocks
         string_occurrences = defaultdict(int)
 
@@ -672,7 +710,7 @@ class GeneralizedScraper:
         #     print(title)
 
     @profile
-    def scrape_all_products(self, scroll_based=False, max_pages=99, max_scrolls=10, url_template=None,
+    def scrape_all_products(self, scroll_based=False, max_pages=99, max_scrolls=20, url_template=None,
                             page_number_supported=True):
         """
         Scrape all products using pagination and scrolling if enabled.
@@ -694,6 +732,11 @@ class GeneralizedScraper:
                 search_url = url_template.format(page_number=page_count)
                 self.driver.get(search_url)
                 self.random_delay()
+
+            # check if we have captcha
+            soup = self.extract_page_structure()
+            if self.is_captcha_present(soup):
+                input("Resolve Captcha and click enter button")
 
             # Scroll down the page if scroll_based is True
             if scroll_based:

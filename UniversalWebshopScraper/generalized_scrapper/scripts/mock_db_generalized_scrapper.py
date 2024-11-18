@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+from tqdm import tqdm
 
 from UniversalWebshopScraper.generalized_scrapper.core.generalized_scrapper import GeneralizedScraper
 
@@ -53,30 +54,35 @@ if __name__ == "__main__":
         # Loop through each category and product
         for category, products in categories_products.items():
             print(f"--- Searching category: {category} ---")
-            category_start_count = scraper.product_count
+
+            # Create a folder for the category
+            category_safe_name = category.replace(" & ", "_").replace(" ", "_")
+            category_save_path = os.path.join(site_save_path, category_safe_name)
+            os.makedirs(category_save_path, exist_ok=True)
 
             for product in products:
-                product_start_count = scraper.product_count
                 print(f"Searching for product: {product}")
                 search_url = site_info["search_url_template"].format(
                     base_url=home_url, query=product.replace(" ", "+"), page_number="{page_number}")
 
                 scraper.open_search_url(search_url.format(page_number=1))
-                scraper.scrape_all_products(scroll_based=True, url_template=search_url, page_number_supported=True)
+                scraped_products = scraper.scrape_all_products(scroll_based=True, url_template=search_url,
+                                                               page_number_supported=True)
 
-            # Calculate the number of products scraped for this category
-            category_product_count = scraper.product_count - category_start_count
-            print(f"Found {category_product_count} new products in the category: {category}")
+                # Save each product immediately after it is scraped
+                for product_data in scraped_products:
+                    product_file = os.path.join(category_save_path, f"{product.replace(' ', '_')}.csv")
 
-            # Save collected products to a CSV for this category
-            category = category.replace(" & ", "_").replace(" ", "_")
-            save_path = os.path.join(site_save_path, f"{category}.csv")
-            print(f"Saving products to: {save_path}")
-            df = pd.DataFrame(scraper.stored_products)
-            df.to_csv(save_path, index=False)
+                    # Save to a CSV file
+                    df = pd.DataFrame([product_data])
 
-            # after saving we should clear the products list
-            scraper.stored_products = []
+                    # Append to the CSV file or create it if it doesn't exist
+                    if not os.path.exists(product_file):
+                        df.to_csv(product_file, index=False)
+                    else:
+                        df.to_csv(product_file, mode='a', header=False, index=False)
+
+            print(f"Finished searching for category: {category}")
 
         scraper.close_driver()
         print('*' * 69)
