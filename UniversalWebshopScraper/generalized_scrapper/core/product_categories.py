@@ -1,6 +1,36 @@
 # product_categories.py
 
 categories_products = {
+    "Electronics": [
+        "Wireless Bluetooth Earbuds", "4K UHD Smart TV", "Noise-Cancelling Headphones",
+        "Portable Power Bank", "Smartphone with Triple Camera", "Smartwatch with Fitness Tracker",
+        "Laptop with Intel i7", "Wireless Charging Pad", "Bluetooth Speaker", "Digital Camera",
+        "Home Security Camera", "VR Headset", "External Hard Drive", "Gaming Mouse",
+        "Mechanical Gaming Keyboard", "Wi-Fi 6 Router", "4K Action Camera", "USB-C Hub",
+        "Portable SSD", "Gaming Headset", "Tablet with Stylus", "Streaming Stick",
+        "Smart Light Bulbs", "Drone with 4K Camera", "Smart Doorbell", "Fitness Tracker",
+        "Wireless HDMI Adapter", "Bluetooth Car Adapter", "Smart Thermostat",
+        "Electric Scooter", "Video Doorbell", "USB-C Fast Charger", "Phone Gimbal",
+        "Digital Photo Frame", "Smart Display", "Smart Speaker", "Waterproof Bluetooth Speaker",
+        "Gaming Console", "Graphics Card", "1080p Webcam", "Portable Projector",
+        "E-Reader", "Smart Glasses", "Smart Plug", "Electric Skateboard",
+        "Robotic Vacuum Cleaner", "Dash Cam", "Bluetooth Transmitter", "Fitness Smart Scale",
+        "Mini Drone", "Wireless Earphones", "Solar Charger", "Monitor Stand", "Wireless Mouse",
+        "Smartphone Gimbal Stabilizer", "Laptop Cooling Pad", "Smart Body Weight Scale",
+        "Digital Alarm Clock", "USB Flash Drive", "Car Phone Mount", "Portable DVD Player",
+        "Video Game Controller", "HDMI Splitter", "Car Backup Camera", "Bluetooth Headset",
+        "Electric Toothbrush", "Laser Printer", "Portable Fan", "Bluetooth Keyboard",
+        "Gaming Monitor", "Smart Key Finder", "Smartwatch Bands", "Gaming Chair",
+        "Portable Hard Drive", "Phone Charging Stand", "Tripod for Smartphones",
+        "Smart Lock", "3D Printer", "Portable Charger", "Camera Lens Kit",
+        "Bluetooth Audio Receiver", "Wi-Fi Range Extender", "Smart LED Strip Lights",
+        "Smart Garage Door Opener", "Car Dash Mount", "Home Theater System",
+        "Laptop Backpack", "Wireless Presenter", "Fitness Smartwatch",
+        "Digital Piano", "Electric Bike", "Smart Bulb Socket", "Virtual Assistant Speaker",
+        "Security Camera System", "Memory Card", "Noise Cancelling Earbuds",
+        "Home Automation Hub", "Cordless Phone", "Action Camera Accessories",
+        "Wi-Fi Extender", "Power Bank with Solar Charger"
+    ],
 
     "Home & Kitchen": [
         "Memory Foam Mattress", "Air Fryer", "Electric Pressure Cooker",
@@ -431,4 +461,16 @@ categories_products = {
         "Termos na jedzenie"
     ]
 
+}
+
+categories_products_missing = {
+    "Electronics": [
+        "Wireless Bluetooth Earbuds", "4K UHD Smart TV", "Noise-Cancelling Headphones",
+        "Video Doorbell", "USB-C Fast Charger", "Digital Photo Frame", "Smart Display",
+        "Smart Speaker", "Graphics Card", "Portable DVD Player", "Video Game Controller",
+        "Car Backup Camera", "Bluetooth Headset", "Electric Toothbrush", "Laser Printer",
+        "Portable Fan", "Bluetooth Keyboard", "Gaming Monitor", "Smart Key Finder",
+        "Smartwatch Bands", "Phone Charging Stand", "Smart Bulb Socket", "Security Camera System",
+        "Memory Card", "Home Automation Hub"
+    ]
 }
