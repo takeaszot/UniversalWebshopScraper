@@ -264,19 +264,22 @@ def main_scraper(site_info, categories_amazon_products, n_workers=2):
 
 
 if __name__ == "__main__":
+    # Set the start method to "spawn" for compatibility with Windows
     set_start_method("spawn", force=True)
 
+    # Define shopping sites to scrape
     shopping_sites = [
         {"name": "aliexpress",
          "home_url": "https://www.aliexpress.com",
          "search_url_template": '{base_url}/w/wholesale-{query}.html?page={{page_number}}'},
     ]
 
-    from UniversalWebshopScraper.generalized_scrapper.core.product_categories import categories_products_missing
-    categories_products = categories_products_missing
+    # Import the product categories for scraping
+    from UniversalWebshopScraper.generalized_scrapper.core.product_categories import categories_products
 
-    n_workers = 4
+    n_workers = 12  # Number of workers to spawn
 
+    # Loop through the shopping sites and start the scraper
     for site_info in shopping_sites:
         main_scraper(site_info, categories_products, n_workers=n_workers)
 
