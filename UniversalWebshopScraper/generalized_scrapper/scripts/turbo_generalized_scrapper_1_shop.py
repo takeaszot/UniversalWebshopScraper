@@ -15,6 +15,14 @@ def worker_process(task_queue, status_queue, detected_image_urls, worker_index, 
 
     scraper = None
 
+    # Predefine screen positions (adjust as needed)
+    screen_positions = [
+        (0, 0),  # Top-left corner
+        (960, 0),  # Top-right corner (for a 1920x1080 screen)
+        (480, 540)  # Center of the screen (adjust for your screen resolution)
+    ]
+    off_screen_position = (-2000, 0)  # Move off-screen when not interacting
+
     try:
         print(f"[INFO] Worker-{worker_index}: Initializing GeneralizedScraper.")
         scraper = GeneralizedScraper(shopping_website="", user_data_dir=temp_dir)
@@ -56,11 +64,17 @@ def worker_process(task_queue, status_queue, detected_image_urls, worker_index, 
 
                         if scraper.is_captcha_present(soup):
                             print(f"[CAPTCHA] Worker-{worker_index}: CAPTCHA detected!")
+                            # Move browser to the center of the screen
+                            scraper.move_browser_window(*screen_positions[worker_index % len(screen_positions)])
                             status_queue.put(('captcha', worker_index))
+
                             print(f"[CAPTCHA] Worker-{worker_index} is waiting for CAPTCHA resolution.")
                             captcha_event.wait()  # Block until CAPTCHA is resolved
                             captcha_event.clear()  # Reset the event for the next CAPTCHA
+
                             print(f"[INFO] Worker-{worker_index}: CAPTCHA resolved. Resuming task...")
+                            # Move browser off-screen after CAPTCHA resolution
+                            scraper.move_browser_window(*off_screen_position)
                             continue  # Retry the current product after CAPTCHA resolution
 
                         scraper.scrape_all_products(scroll_based=True, url_template=search_url, page_number_supported=True)
@@ -92,6 +106,7 @@ def worker_process(task_queue, status_queue, detected_image_urls, worker_index, 
         except Exception as e:
             print(f"[WARNING] Worker-{worker_index}: Error closing driver: {e}")
             traceback.print_exc()
+
 
 
 def main_scraper(site_info, categories_amazon_products, n_workers=2):
@@ -190,7 +205,7 @@ if __name__ == "__main__":
 
     from UniversalWebshopScraper.generalized_scrapper.core.product_categories import categories_products
 
-    n_workers = 3  # Define the number of workers
+    n_workers = 10  # Define the number of workers
 
     for site_info in shopping_sites:
         main_scraper(site_info, categories_products, n_workers=n_workers)

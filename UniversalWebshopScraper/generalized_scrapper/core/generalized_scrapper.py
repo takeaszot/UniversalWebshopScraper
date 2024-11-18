@@ -85,33 +85,54 @@ class GeneralizedScraper:
     def initialize_driver(self):
         """
         Sets up a Selenium WebDriver instance using undetected-chromedriver, configured
-        to avoid detection on sites with anti-bot measures.
+        to avoid detection on sites with anti-bot measures and simulate foreground behavior.
 
-        This method configures Chrome options for stealth browsing, including disabling
-        pop-ups and extensions, and assigning a temporary data path to isolate browser
-        profiles for each session.
+        This method configures Chrome options for stealth browsing, disables throttling,
+        and enforces dynamic content rendering even in the background.
 
         Returns:
             WebDriver: A configured instance of undetected-chromedriver's Chrome WebDriver.
         """
-        # this has to be imported separately to avoid circular imports with multiprocessing
         import undetected_chromedriver as uc
 
         # Set up Chrome options to avoid detection
         options = uc.ChromeOptions()
 
-        # Set user data directory to enforce separate profiles
+        # User data directory for separate profiles
         options.add_argument(f"user-data-dir={self.user_data_dir}")
         options.add_argument("--no-first-run")
         options.add_argument("--new-window")
         options.add_argument("--disable-extensions")
         options.add_argument("--disable-popup-blocking")
 
+        # Prevent throttling and simulate foreground activity
+        options.add_argument("--disable-background-timer-throttling")
+        options.add_argument("--disable-backgrounding-occluded-windows")
+        options.add_argument("--disable-renderer-backgrounding")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--force-device-scale-factor=1")
+
+        # Optional: Enable debugging to analyze behavior
+        # options.add_argument("--remote-debugging-port=9222")
+
+        # Optional: Set a user-agent string to simulate a real browser
+        options.add_argument(
+            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.5481.178 Safari/537.36"
+        )
+
         # Create a unique temporary directory for undetected_chromedriver data_path
         temp_data_path = tempfile.mkdtemp()
 
         # Initialize Chrome driver with the specified options and unique data_path
         driver = uc.Chrome(options=options, user_data_dir=temp_data_path)
+
+        # Move browser window to the foreground by simulating activity
+        try:
+            driver.set_window_position(0, 0)  # Move to top-left corner of the screen
+            driver.set_window_size(1920, 1080)  # Set window size to ensure visibility
+        except Exception as e:
+            print(f"Failed to move browser to the foreground: {e}")
+
         return driver
 
     def random_delay(self, min_seconds=0, max_seconds=1):
@@ -124,6 +145,17 @@ class GeneralizedScraper:
             max_seconds (int, optional): Maximum delay time in seconds.
         """
         time.sleep(random.uniform(min_seconds, max_seconds))
+
+    def move_browser_window(self, x, y):
+        """
+        Moves the browser window to a specific position on the screen.
+        Useful to ensure JavaScript content renders even when off-screen.
+        """
+        try:
+            self.driver.set_window_position(x, y)
+            self.driver.set_window_size(1920, 1080)  # Adjust based on your screen size
+        except Exception as e:
+            print(f"Failed to move browser window: {e}")
 
     def is_captcha_present(self, soup):
         """
@@ -628,37 +660,20 @@ class GeneralizedScraper:
         if self.driver:
             self.driver.quit()
 
-    def simulate_mouse_movement(self):
-        """
-        Simulates a mouse movement event to mimic user activity.
-        This can help keep the session active and bypass bot detection.
-        """
-        try:
-            self.driver.execute_script("""
-                const evt = new MouseEvent('mousemove', {
-                    bubbles: true,
-                    cancelable: true,
-                    view: window
-                });
-                document.dispatchEvent(evt);
-            """)
-        except Exception as e:
-            print(f"Failed to simulate mouse movement: {e}")
-
     def incremental_scroll_with_html_check(self, max_scrolls=10, scroll_pause_time=1):
         """
         Scroll incrementally and check if more HTML is being loaded.
-        Simulates mouse movement to mimic user interaction.
+
+        Args:
+            max_scrolls (int): Maximum number of scroll attempts.
+            scroll_pause_time (int): Pause time between scrolls in seconds.
         """
         last_page_source = self.driver.page_source  # Initial page source for comparison
 
         for scroll in range(max_scrolls):
             # Scroll down incrementally
-            self.driver.execute_script("window.scrollBy(0, 800);")
-            time.sleep(scroll_pause_time)
-
-            # Simulate user activity to keep the session active
-            self.simulate_mouse_movement()
+            self.driver.execute_script("window.scrollBy(0, 2400);")
+            time.sleep(random.uniform(scroll_pause_time - 0.5, scroll_pause_time + 0.5))
 
             # Get the current page source and compare with the last
             current_page_source = self.driver.page_source
