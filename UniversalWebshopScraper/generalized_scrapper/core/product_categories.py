@@ -463,14 +463,3 @@ categories_products = {
 
 }
 
-categories_products_missing = {
-    "Electronics": [
-        "Wireless Bluetooth Earbuds", "4K UHD Smart TV", "Noise-Cancelling Headphones",
-        "Video Doorbell", "USB-C Fast Charger", "Digital Photo Frame", "Smart Display",
-        "Smart Speaker", "Graphics Card", "Portable DVD Player", "Video Game Controller",
-        "Car Backup Camera", "Bluetooth Headset", "Electric Toothbrush", "Laser Printer",
-        "Portable Fan", "Bluetooth Keyboard", "Gaming Monitor", "Smart Key Finder",
-        "Smartwatch Bands", "Phone Charging Stand", "Smart Bulb Socket", "Security Camera System",
-        "Memory Card", "Home Automation Hub"
-    ]
-}

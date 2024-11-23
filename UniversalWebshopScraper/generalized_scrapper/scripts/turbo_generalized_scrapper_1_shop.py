@@ -111,6 +111,13 @@ def worker_process(task_queue, status_queue, detected_image_urls, worker_index, 
             status_queue.put(('ready', worker_index))
             print(f"Worker-{worker_index}: Ready to receive tasks.")
 
+            # Define the base path for saving data in the 'data' repository
+            base_data_path = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "../../../../Data/scrapped_data")
+            )
+            # print(f"Worker-{worker_index}: Base data path: {base_data_path}")
+            os.makedirs(base_data_path, exist_ok=True)  # Ensure the directory exists
+
             while True:
                 task = task_queue.get()
                 if task is None:
@@ -153,9 +160,15 @@ def worker_process(task_queue, status_queue, detected_image_urls, worker_index, 
                                 print(f"CAPTCHA resolved. Resuming task...")
                                 continue
 
+                            # Define the save path inside the 'data' repository
+                            save_dir = os.path.join(base_data_path, f"{shop_name}", f"{category}")
+                            os.makedirs(save_dir, exist_ok=True)
+                            save_path = os.path.join(save_dir, f"{product}.csv")
                             scraper.scrape_all_products(scroll_based=True, url_template=search_url, page_number_supported=True)
-                            scraper.save_to_csv(save_path=f"{product}.csv", category=category)
+                            scraper.save_to_csv(save_path=save_path, category=category)
                             scraper.stored_products.clear()
+
+                            print(f"Saved scraped data to: {save_path}")
 
                         except Exception as e:
                             print(f"Error scraping product '{product}': {e}")
@@ -277,7 +290,7 @@ if __name__ == "__main__":
     # Import the product categories for scraping
     from UniversalWebshopScraper.generalized_scrapper.core.product_categories import categories_products
 
-    n_workers = 12  # Number of workers to spawn
+    n_workers = 10  # Number of workers to spawn
 
     # Loop through the shopping sites and start the scraper
     for site_info in shopping_sites:
