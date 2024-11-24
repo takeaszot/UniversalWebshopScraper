@@ -8,6 +8,10 @@ import os
 from line_profiler import profile
 from collections import defaultdict
 import tempfile
+import undetected_chromedriver as uc
+from selenium.webdriver.common.by import By
+import re
+from bs4 import BeautifulSoup, Tag
 
 from UniversalWebshopScraper.generalized_scrapper.core.functions import normalize_price, normalize_url
 
@@ -17,9 +21,9 @@ from UniversalWebshopScraper.generalized_scrapper.core.functions import normaliz
 """
 
 # Define the patterns for detecting prices and currencies should work for all currencies and prices with or without commas
-CURRENCY_PATTER = r"(\$|€|£|zł|PLN|USD|GBP|JPY|AUD)"
+CURRENCY_PATTERN = r"(\$|€|£|zł|PLN|USD|GBP|JPY|AUD)"
 PRICE_PATTERN = r"(\d+(?:[.,]\d{3})*(?:[.,]\d\d))"
-COST_PATTERN = f"{PRICE_PATTERN}\s*{CURRENCY_PATTER}|{CURRENCY_PATTER}\s*{PRICE_PATTERN}"
+COST_PATTERN = rf"{PRICE_PATTERN}\s*{CURRENCY_PATTERN}|{CURRENCY_PATTERN}\s*{PRICE_PATTERN}"
 
 class GeneralizedScraper:
     """
@@ -31,63 +35,93 @@ class GeneralizedScraper:
         shopping_website (str, optional): The URL of the shopping website to scrape.
         user_data_dir (str, optional): The directory path for storing user data, allowing
                                        persistence of session information between scrapes.
+        initialize_driver_func (callable, optional): Custom function to initialize the WebDriver.
     """
-    def __init__(self, shopping_website=None, user_data_dir=None):
+    def __init__(self, shopping_website=None, user_data_dir=None, offline_mode=False, initialize_driver_func=None):
         """
-         Initializes the GeneralizedScraper instance with necessary attributes
-         for web scraping operations.
+        Initializes the GeneralizedScraper instance with necessary attributes
+        for web scraping operations.
 
-         This includes setting up a Selenium WebDriver instance, initializing sets and
-         lists to store product and CAPTCHA information, and setting up configurations
-         specific to the shopping website.
+        This includes setting up a Selenium WebDriver instance, initializing sets and
+        lists to store product and CAPTCHA information, and setting up configurations
+        specific to the shopping website.
 
-         Args:
-             shopping_website (str, optional): The URL of the shopping website.
-             user_data_dir (str, optional): Directory for storing user data, enabling
+        Args:
+            shopping_website (str, optional): The URL of the shopping website.
+            user_data_dir (str, optional): Directory for storing user data, enabling
                                             persistence of session information.
-         """
+            initialize_driver_func (callable, optional): A custom function to initialize the WebDriver.
+        """
         self.shopping_website = shopping_website  # The URL of the shopping website
         self.user_data_dir = user_data_dir  # Directory for storing user data
-        self.driver = self.initialize_driver()  # Initialize the Chrome WebDriver
+        self.initialize_driver_func = initialize_driver_func  # Custom or default driver initializer
+        if offline_mode:
+            self.driver = None
+        else:
+            if self.initialize_driver_func:
+                self.driver = self.initialize_driver_func(self)  # Use the provided custom driver initializer
+            else:
+                self.driver = self.default_initialize_driver()  # Use the default driver initializer
+
         self.marked_blocks = set()  # Set to store marked blocks
         self.detected_products = set()  # Set to store detected products
         self.wrong_titles = set()  # Set to store detected titles
         self.detected_image_urls = SortedSet()  # Ordered set for image URLs
-        self.parent_blocks = []  # change to set later, for now we use list to store all parent blocks to know how many we have
-        self.shopping_website = shopping_website  # The URL of the shopping website
+        self.parent_blocks = []  # List to store all parent blocks (convert to set later if needed)
         self.product_count = 0  # Counter for the number of products detected
         self.stored_products = []  # List to store gathered products (dict format)
 
     def initialize_driver(self):
         """
         Sets up a Selenium WebDriver instance using undetected-chromedriver, configured
-        to avoid detection on sites with anti-bot measures.
+        to avoid detection on sites with anti-bot measures and simulate foreground behavior.
 
-        This method configures Chrome options for stealth browsing, including disabling
-        pop-ups and extensions, and assigning a temporary data path to isolate browser
-        profiles for each session.
+        This method configures Chrome options for stealth browsing, disables throttling,
+        and enforces dynamic content rendering even in the background.
 
         Returns:
             WebDriver: A configured instance of undetected-chromedriver's Chrome WebDriver.
         """
-        # this has to be imported separately to avoid circular imports with multiprocessing
         import undetected_chromedriver as uc
 
         # Set up Chrome options to avoid detection
         options = uc.ChromeOptions()
 
-        # Set user data directory to enforce separate profiles
+        # User data directory for separate profiles
         options.add_argument(f"user-data-dir={self.user_data_dir}")
         options.add_argument("--no-first-run")
         options.add_argument("--new-window")
         options.add_argument("--disable-extensions")
         options.add_argument("--disable-popup-blocking")
 
+        # Prevent throttling and simulate foreground activity
+        options.add_argument("--disable-background-timer-throttling")
+        options.add_argument("--disable-backgrounding-occluded-windows")
+        options.add_argument("--disable-renderer-backgrounding")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--force-device-scale-factor=1")
+
+        # Optional: Enable debugging to analyze behavior
+        # options.add_argument("--remote-debugging-port=9222")
+
+        # Optional: Set a user-agent string to simulate a real browser
+        options.add_argument(
+            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.5481.178 Safari/537.36"
+        )
+
         # Create a unique temporary directory for undetected_chromedriver data_path
         temp_data_path = tempfile.mkdtemp()
 
         # Initialize Chrome driver with the specified options and unique data_path
         driver = uc.Chrome(options=options, user_data_dir=temp_data_path)
+
+        # Move browser window to the foreground by simulating activity
+        try:
+            driver.set_window_position(0, 0)  # Move to top-left corner of the screen
+            driver.set_window_size(1920, 1080)  # Set window size to ensure visibility
+        except Exception as e:
+            print(f"Failed to move browser to the foreground: {e}")
+
         return driver
 
     def random_delay(self, min_seconds=0, max_seconds=1):
@@ -101,6 +135,17 @@ class GeneralizedScraper:
         """
         time.sleep(random.uniform(min_seconds, max_seconds))
 
+    def move_browser_window(self, x, y):
+        """
+        Moves the browser window to a specific position on the screen.
+        Useful to ensure JavaScript content renders even when off-screen.
+        """
+        try:
+            self.driver.set_window_position(x, y)
+            self.driver.set_window_size(1920, 1080)  # Adjust based on your screen size
+        except Exception as e:
+            print(f"Failed to move browser window: {e}")
+
     def is_captcha_present(self, soup):
         """
         Detect if a CAPTCHA is present based on known CAPTCHA indicators in the HTML.
@@ -111,8 +156,9 @@ class GeneralizedScraper:
         Returns:
             bool: True if CAPTCHA is detected, False otherwise.
         """
-        # TODO maybe this need to be improved
-        # Define common CAPTCHA selectors
+        import re
+
+        # Define common CAPTCHA selectors (updated for AliExpress-specific elements)
         captcha_selectors = [
             {'id': re.compile(r'captcha', re.I)},
             {'class': re.compile(r'captcha', re.I)},
@@ -124,6 +170,11 @@ class GeneralizedScraper:
             {'class': re.compile(r'h-captcha', re.I)},
             {'class': re.compile(r'arkose', re.I)},  # For Arkose Labs
             {'class': re.compile(r'cf-captcha', re.I)},  # For Cloudflare captchas
+            # AliExpress-specific selectors
+            {'id': re.compile(r'nocaptcha', re.I)},  # Specific ID for AliExpress CAPTCHA
+            {'class': re.compile(r'baxia-punish', re.I)},  # AliExpress punish page
+            {'id': re.compile(r'nc_\d+_nocaptcha', re.I)},  # NoCaptcha module
+            {'class': re.compile(r'nc-container', re.I)},  # NoCaptcha container
         ]
 
         # Check for elements matching the CAPTCHA selectors
@@ -139,7 +190,7 @@ class GeneralizedScraper:
                 print("CAPTCHA detected in an iframe.")
                 return True
 
-        # Optionally, check for CAPTCHA keywords in form actions or JavaScript
+        # Check for CAPTCHA keywords in form actions or JavaScript
         forms = soup.find_all('form', action=True)
         for form in forms:
             if re.search(r'captcha', form['action'], re.I):
@@ -150,6 +201,19 @@ class GeneralizedScraper:
         for script in scripts:
             if re.search(r'captcha', script['src'], re.I):
                 print("CAPTCHA detected in script source.")
+                return True
+
+        # Check for common CAPTCHA messages in text content
+        text_indicators = [
+            "Please slide to verify",  # AliExpress NoCaptcha prompt
+            "unusual traffic",  # Generic unusual traffic message
+            "Sorry, we have detected unusual traffic",  # AliExpress-specific message
+            "prove you're not a robot",  # Generic CAPTCHA message
+        ]
+
+        for text in text_indicators:
+            if soup.body and text in soup.body.get_text(strip=True):
+                print(f"CAPTCHA detected based on text content: '{text}'")
                 return True
 
         # If none of the CAPTCHA indicators are found, assume no CAPTCHA is present
@@ -166,11 +230,17 @@ class GeneralizedScraper:
             bool: True if the page opened successfully, False otherwise.
         """
         try:
+            soup = self.extract_page_structure()
+            if self.is_captcha_present(soup):
+                input("Resolve Captcha and click enter button")
+            return True
+
+
             self.driver.get(home_url)
             self.random_delay()
-            #soup = self.extract_page_structure()
-            #if self.is_captcha_present(soup):
-            #    input("Resolve Captcha and click enter button")
+            soup = self.extract_page_structure()
+            if self.is_captcha_present(soup):
+                input("Resolve Captcha and click enter button")
             return True
         except Exception as e:
             print(f"Failed to navigate to the product URL: {e}")
@@ -187,11 +257,20 @@ class GeneralizedScraper:
             bool: True if the page opened successfully, False otherwise.
         """
         try:
+            # check if we have captcha
+            soup = self.extract_page_structure()
+            if self.is_captcha_present(soup):
+                input("Resolve Captcha and click enter button")
+            return True
+
+            # open the search URL
             self.driver.get(search_url.format(page_number=1))
             self.random_delay()
             soup = self.extract_page_structure()
-            ##if self.is_captcha_present(soup):
-            #    input("Resolve Captcha and click enter button")
+
+            # check if we have captcha
+            if self.is_captcha_present(soup):
+                input("Resolve Captcha and click enter button")
             return True
         except Exception as e:
             print(f"Failed to navigate to the product URL: {e}")
@@ -235,6 +314,7 @@ class GeneralizedScraper:
         Args:
             soup (BeautifulSoup): Parsed HTML of the page.
         """
+        product_scraped = 0
 
         # Step 1: Identify all potential blocks that might contain product information.
         # We look for common HTML tags used to wrap products on e-commerce websites.
@@ -245,7 +325,7 @@ class GeneralizedScraper:
         blocks.sort(key=lambda x: len(list(x.parents)), reverse=True)
 
         # how many block
-        # print(f"Number of blocks: {len(blocks)}")
+        #print(f"Number of blocks: {len(blocks)}")
 
         # Step 3: Iterate through each block to identify and process those containing product data.
         for block in blocks:
@@ -318,6 +398,9 @@ class GeneralizedScraper:
 
             # Step 12: Increment the product count after successfully processing a product block.
             self.product_count += 1
+            product_scraped += 1
+
+        print(f"Number of products scraped: {product_scraped}")
 
     @profile
     def extract_product_info(self, block):
@@ -330,6 +413,11 @@ class GeneralizedScraper:
         Returns:
             tuple: A tuple containing URLs, image URLs, price, and title, or None if any are missing.
         """
+        title = self.find_title(block)
+
+        if not title:
+            return None
+
         price = self.find_price(block)
 
         if not price:
@@ -343,11 +431,6 @@ class GeneralizedScraper:
         image_urls = self.find_image_url(block)
 
         if not image_urls:
-            return None
-
-        title = self.find_title(block)
-
-        if not title:
             return None
 
         return product_urls, image_urls, price, title
@@ -446,13 +529,15 @@ class GeneralizedScraper:
         Returns:
             str: The maximum price found in the price tags.
         """
-        max_price_tag = price_tags[0]
-        max_price = price_tags[0][0] if price_tags[0][0] else price_tags[0][3]
-        max_price = float(normalize_price(max_price))
+        max_price_tag = ["0.00", "", "", ""]
+        max_price = 0
 
         for pt in price_tags:
             price = pt[0] if pt[0] else pt[3]
-            price = float(normalize_price(price))  # Normalize each price before comparison
+            try:
+                price = float(normalize_price(price))
+            except:
+                price = 0
 
             if price > max_price:
                 max_price_tag = pt
@@ -548,15 +633,16 @@ class GeneralizedScraper:
             save_path (str): The file path to save the CSV file.
         """
         if self.stored_products:
-            # Extract website name from the URL for folder naming
-            website_name = self.shopping_website.replace("https://", "").replace("www.", "").split('.')[0]
+            if not save_path:
+                # Extract website name from the URL for folder naming
+                website_name = self.shopping_website.replace("https://", "").replace("www.", "").split('.')[0]
 
-            # Create directory for the specific website inside the 'scraped_data' folder
-            save_dir = os.path.join('../scraped_data', website_name, category)
+                # Create directory for the specific website inside the 'scraped_data' folder
+                save_dir = os.path.join('../scraped_data', website_name, category)
 
-            # Create the directory if it doesn't exist
-            if not os.path.exists(save_dir):
-                os.makedirs(save_dir)
+                # Create the directory if it doesn't exist
+                if not os.path.exists(save_dir):
+                    os.makedirs(save_dir)
 
             # Create the full path for the CSV file
             csv_filename = f'{save_path}' if save_path else f'{website_name}_products.csv'
@@ -579,32 +665,34 @@ class GeneralizedScraper:
         if self.driver:
             self.driver.quit()
 
-    def scroll_to_bottom(self, max_scrolls=10, scroll_pause_time=1):
+    def incremental_scroll_with_html_check(self, max_scrolls=10, scroll_pause_time=1):
         """
-        Scroll down the page a set number of times to load more products.
+        Scroll incrementally and check if more HTML is being loaded.
 
         Args:
-            max_scrolls (int): Maximum number of scrolls.
+            max_scrolls (int): Maximum number of scroll attempts.
             scroll_pause_time (int): Pause time between scrolls in seconds.
         """
+        last_page_source = self.driver.page_source  # Initial page source for comparison
 
-        last_height = self.driver.execute_script("return document.body.scrollHeight")
+        for scroll in range(max_scrolls):
+            # Scroll down incrementally
+            self.driver.execute_script("window.scrollBy(0, 2400);")
+            time.sleep(random.uniform(scroll_pause_time - 0.5, scroll_pause_time + 0.5))
 
-        for i in range(max_scrolls):
-            # Scroll to the bottom of the page
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            self.random_delay(scroll_pause_time, scroll_pause_time + 2)
+            # Get the current page source and compare with the last
+            current_page_source = self.driver.page_source
 
-            # Wait for new content to load
-            new_height = self.driver.execute_script("return document.body.scrollHeight")
-
-            # Break if the page height hasn't changed, meaning no new content
-            if new_height == last_height:
+            if current_page_source == last_page_source:
+                print(f"Scroll {scroll + 1}: No additional HTML loaded. Stopping.")
                 break
+            else:
+                print(f"Scroll {scroll + 1}: Additional HTML detected.")
 
-            last_height = new_height
+            # Update the last page source
+            last_page_source = current_page_source
 
-        # print(f"Scrolled {i + 1} times")
+        print("Finished scrolling.")
 
     # detect of not interesting blocks
     def trash_detection(self, soup):
@@ -614,6 +702,7 @@ class GeneralizedScraper:
         Args:
             soup (BeautifulSoup): Parsed HTML of the page.
         """
+        # todo add all imgs urls that are more than 2 times on the page
         # Dictionary to store counts of unique strings across blocks
         string_occurrences = defaultdict(int)
 
@@ -636,12 +725,12 @@ class GeneralizedScraper:
         self.wrong_titles = {string for string, count in string_occurrences.items() if count >= threshold}
 
         # Optional: Print out detected "trash" strings for debugging, each on a new line
-        #print("Detected non-interesting (trash) titles:")
-        #for title in self.wrong_titles:
-        #    print(title)
+        # print("Detected non-interesting (trash) titles:")
+        # for title in self.wrong_titles:
+        #     print(title)
 
     @profile
-    def scrape_all_products(self, scroll_based=False, max_pages=25, max_scrolls=2, url_template=None,
+    def scrape_all_products(self, scroll_based=False, max_pages=99, max_scrolls=20, url_template=None,
                             page_number_supported=True):
         """
         Scrape all products using pagination and scrolling if enabled.
@@ -656,7 +745,7 @@ class GeneralizedScraper:
 
         page_count = 1
         while page_count <= max_pages:
-            # print(f"Scraping page {page_count}")
+            print(f"Scraping page {page_count}")
 
             # Load the current page using pagination if supported
             if page_number_supported and url_template:
@@ -664,9 +753,14 @@ class GeneralizedScraper:
                 self.driver.get(search_url)
                 self.random_delay()
 
+            # check if we have captcha
+            soup = self.extract_page_structure()
+            if self.is_captcha_present(soup):
+                input("Resolve Captcha and click enter button")
+
             # Scroll down the page if scroll_based is True
             if scroll_based:
-                self.scroll_to_bottom(max_scrolls)  # Scroll down to load more products on the current page
+                self.incremental_scroll_with_html_check(max_scrolls)  # Scroll down to load more products on the current page
 
             # Extract product blocks after scrolling
             soup = self.extract_page_structure()
@@ -675,6 +769,10 @@ class GeneralizedScraper:
             if page_count == 1:
                 self.trash_detection(soup)
 
+            # number of product before scraping
+            helper = self.product_count
+
+            # Detect product blocks on the page
             self.detect_product_blocks(soup)
 
             # how many marked blocks we have
@@ -682,6 +780,12 @@ class GeneralizedScraper:
 
             # clear marked blocks
             self.marked_blocks.clear()
+
+            # if we dont scrap anything we move to next product ie number of product is same as before
+            if page_count > 3:
+                if helper == self.product_count:
+                    print("No more products to scrape")
+                    break
 
             # Handle pagination if supported, otherwise just scroll and stop
             if page_number_supported:
@@ -716,12 +820,41 @@ if __name__ == "__main__":
         scraper.close_driver()
         return new_method_count
 
+    from UniversalWebshopScraper.generalized_scrapper.core.initialize_driver import initialize_driver_single
+    ### Test Aliexpress (scroll-based) ###
+    home_url_aliexpress = "https://www.aliexpress.com"
+    aliexpress_search_url_template = "{home_url}/w/wholesale-{query}.html?page={{page_number}}".format(home_url=home_url_aliexpress, query=search_query.replace(" ", "+"))
+
+
+    scraper = GeneralizedScraper(
+        shopping_website=home_url_aliexpress,
+        initialize_driver_func=initialize_driver_single
+    )
+    new_aliexpress_count = run_new_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products_new.csv', scroll_based=True, page_number_supported=True)
+    print(f"New Aliexpress product count: {new_aliexpress_count}")
+
+    ### Test Temu (scroll-based) ###
+    home_url_temu = "https://www.temu.com"
+    temu_search_url_template = "{base_url}/search_result.html?search_key={query}&search_method=user".format(
+        base_url=home_url_temu, query=search_query.replace(" ", "+"))
+
+    scraper = GeneralizedScraper(
+        shopping_website=home_url_temu,
+        initialize_driver_func=initialize_driver_single
+    )
+
+    new_temu_count = run_new_method(scraper, temu_search_url_template, home_url_temu, 'temu_products_new.csv', scroll_based=True, page_number_supported=False)
+    print(f"New Temu product count: {new_temu_count}")
+
     ### Test Allegro (pagination-based) ###
     home_url_allegro = "https://www.allegro.pl"
     # Corrected URL template with double curly braces for page_number
     allegro_search_url_template = f'{home_url_allegro}/listing?string={search_query.replace(" ", "+")}&p={{page_number}}'
 
-    scraper = GeneralizedScraper(shopping_website=home_url_allegro)
+    scraper = GeneralizedScraper(
+        shopping_website=home_url_allegro,
+        initialize_driver_func=initialize_driver_single
+    )
     new_allegro_count = run_new_method(scraper, allegro_search_url_template, home_url_allegro,
                                        'allegro_products_new.csv', scroll_based=True, page_number_supported=True)
     print(f"New Allegro product count: {new_allegro_count}")
@@ -731,7 +864,10 @@ if __name__ == "__main__":
     ebay_search_url_template = "{base_url}/sch/i.html?_nkw={query}&_pgn={{page_number}}".format(
         base_url=home_url_ebay, query=search_query.replace(" ", "+"))
 
-    scraper = GeneralizedScraper(shopping_website=home_url_ebay)
+    scraper = GeneralizedScraper(
+        shopping_website=home_url_ebay,
+        initialize_driver_func=initialize_driver_single
+    )
     new_ebay_count = run_new_method(scraper, ebay_search_url_template, home_url_ebay, 'ebay_products_new.csv', scroll_based=True, page_number_supported=True)
     print(f"New eBay product count: {new_ebay_count}")
 
@@ -739,23 +875,20 @@ if __name__ == "__main__":
     home_url_aliexpress = "https://www.aliexpress.com"
     aliexpress_search_url_template = "{home_url}/w/wholesale-{query}.html?page={{page_number}}".format(home_url=home_url_aliexpress, query=search_query.replace(" ", "+"))
 
-    scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
+    scraper = GeneralizedScraper(
+        shopping_website=home_url_aliexpress,
+        initialize_driver_func=initialize_driver_single
+    )
     new_aliexpress_count = run_new_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products_new.csv', scroll_based=True, page_number_supported=True)
     print(f"New Aliexpress product count: {new_aliexpress_count}")
-
-    ### Test Temu (scroll-based) ###
-    home_url_temu = "https://www.temu.com"
-    temu_search_url_template = "{base_url}/search_result.html?search_key={query}&search_method=user".format(
-        base_url=home_url_temu, query=search_query.replace(" ", "+"))
-
-    scraper = GeneralizedScraper(shopping_website=home_url_temu)
-    new_temu_count = run_new_method(scraper, temu_search_url_template, home_url_temu, 'temu_products_new.csv', scroll_based=True, page_number_supported=False)
-    print(f"New Temu product count: {new_temu_count}")
 
     ### Test Amazon (pagination-based) ###
     home_url_amazon = "https://www.amazon.com"
     amazon_search_url_template = "{base_url}/s?k={query}&page={{page_number}}".format(base_url=home_url_amazon, query=search_query.replace(" ", "+"))
 
-    scraper = GeneralizedScraper(shopping_website=home_url_amazon)
+    scraper = GeneralizedScraper(
+        shopping_website=home_url_amazon,
+        initialize_driver_func=initialize_driver_single
+    )
     new_amazon_count = run_new_method(scraper, amazon_search_url_template, home_url_amazon, 'amazon_products_new.csv', scroll_based=True, page_number_supported=True)
     print(f"New Amazon product count: {new_amazon_count}")
