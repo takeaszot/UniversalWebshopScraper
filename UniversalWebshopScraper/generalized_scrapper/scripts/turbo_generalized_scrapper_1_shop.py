@@ -3,173 +3,226 @@ from multiprocessing import Process, Manager, set_start_method, Queue
 from UniversalWebshopScraper.generalized_scrapper.core.generalized_scrapper import GeneralizedScraper
 import time
 import traceback
+import sys
+import logging
+import os
+from contextlib import contextmanager
+from colorama import Fore, Style, init
 
-def worker_process(task_queue, status_queue, detected_image_urls, worker_index):
+# Initialize colorama
+init(autoreset=True)
+
+# Define colors for workers
+WORKER_COLORS = [Fore.RED, Fore.GREEN, Fore.BLUE, Fore.YELLOW, Fore.CYAN, Fore.MAGENTA]
+
+
+class WorkerStreamLogger:
     """
-    Worker process that initializes a persistent GeneralizedScraper instance and processes tasks from the task_queue.
-    Communicates status back to the main process via the status_queue.
-
-    Args:
-        task_queue (multiprocessing.Queue): Queue from which the worker retrieves scraping tasks.
-        status_queue (multiprocessing.Queue): Queue through which the worker sends status updates to the main process.
-        detected_image_urls (multiprocessing.Manager.list): Shared list to store detected image URLs and prevent duplicates.
-        worker_index (int): Unique index identifying the worker, used for consistent file naming.
+    Custom stream logger to redirect prints and prepend [WORKER x] with color.
     """
-    print(f"[INFO] Worker-{worker_index}: Starting and creating temporary directory.")
-    temp_dir = tempfile.mkdtemp(prefix=f"worker_{worker_index}_")
-    print(f"[INFO] Worker-{worker_index}: Created temporary directory for Chrome instance: {temp_dir}")
+    def __init__(self, worker_index, log_func):
+        self.worker_index = worker_index
+        self.log_func = log_func
+        self.color = WORKER_COLORS[worker_index % len(WORKER_COLORS)]  # Assign a unique color
 
-    scraper = None  # Initialize scraper to None to handle failures gracefully
+    def write(self, message):
+        if message.strip():  # Avoid logging empty lines
+            # Colorize only the prefix `[WORKER x]`
+            colored_prefix = f"{self.color}[WORKER {self.worker_index}]{Style.RESET_ALL}"
+            # Append the rest of the message in default (white) color
+            formatted_message = f"{colored_prefix} {message.strip()}"
+            self.log_func(formatted_message)
 
+    def flush(self):
+        pass  # No need to implement flush for our logging use case
+
+
+def setup_logging(worker_index, shop_name):
+    """
+    Set up a logger that logs to both a file and the console.
+    Logs are stored in a subfolder for each shop inside the 'scraped_logs' folder in the project root.
+    """
+    # Ensure logs are written to the root `scraped_logs` folder, not relative to the script
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Navigate to project root
+    logs_base_dir = os.path.join(project_root, "scraped_logs", shop_name)
+    os.makedirs(logs_base_dir, exist_ok=True)  # Ensure the directory exists
+
+    log_file = os.path.join(logs_base_dir, f"worker_{worker_index}.log")
+
+    # Create logger
+    logger = logging.getLogger(f"Worker-{worker_index}-{shop_name}")
+    logger.setLevel(logging.INFO)
+
+    # File handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+    file_formatter = logging.Formatter("%(message)s")
+    file_handler.setFormatter(file_formatter)
+
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter("%(message)s")
+    console_handler.setFormatter(console_formatter)
+
+    if not logger.handlers:
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
+
+    return logger
+
+@contextmanager
+def redirect_stdout_stderr(worker_index, log_func):
+    """
+    Context manager to redirect stdout and stderr to the custom WorkerStreamLogger.
+    """
+    worker_logger = WorkerStreamLogger(worker_index, log_func)
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    sys.stdout = sys.stderr = worker_logger
     try:
-        # Attempt to initialize the scraper
-        print(f"[INFO] Worker-{worker_index}: Initializing GeneralizedScraper.")
-        scraper = GeneralizedScraper(shopping_website="", user_data_dir=temp_dir)
-        scraper.detected_image_urls = detected_image_urls
-
-        # Signal readiness to the main process
-        status_queue.put(('ready', worker_index))
-        print(f"[INFO] Worker-{worker_index}: Ready to receive tasks.")
-
-        while True:
-            task = task_queue.get()
-            if task is None:
-                # Sentinel received, terminate the worker
-                print(f"[INFO] Worker-{worker_index}: Received termination signal. Exiting.")
-                break
-
-            site_info, category, product_chunk = task
-            try:
-                site_name = site_info.get("name", "unknown_site")
-                home_url = site_info.get("home_url", "")
-                search_url_template = site_info.get("search_url_template", "")
-
-                # If the scraper is set to a different site, reinitialize it
-                if scraper.shopping_website != home_url:
-                    scraper.shopping_website = home_url
-                    if not scraper.open_home_page(home_url):
-                        raise Exception(f"Failed to open home page for {site_name}")
-
-                print(f"***** Worker-{worker_index} processing category '{category}' on '{site_name}' *****")
-
-                for product in product_chunk:
-                    try:
-                        print(f"Worker-{worker_index}: Searching for product: {product}")
-                        search_url = search_url_template.format(
-                            base_url=home_url,
-                            query=product.replace(" ", "+"),
-                            page_number="{page_number}"
-                        )
-
-                        # Open the search URL and scrape all relevant product data
-                        scraper.open_search_url(search_url.format(page_number=1))
-                        scraper.scrape_all_products(scroll_based=False, url_template=search_url,
-                                                    page_number_supported=True)
-                        print(f"Worker-{worker_index}: Scraped product: {product}")
-
-                    except Exception as e:
-                        print(f"[ERROR] Worker-{worker_index}: Error scraping product '{product}': {e}")
-                        traceback.print_exc()
-
-                print(
-                    f"Worker-{worker_index}: Collected {len(scraper.stored_products)} products for category '{category}'")
-
-                # Define CSV filename format with worker ID, site name, and category.
-                csv_filename = f"batch_{worker_index}_{site_info['name']}_{category.replace(' ', '_')}_products.csv"
-
-                # Save the products collected by this worker to CSV.
-                scraper.save_to_csv(save_path=csv_filename, category=category)
-
-                # Clear stored data to prepare for the next category
-                scraper.stored_products.clear()
-
-                # Signal task completion to the main process
-                status_queue.put(('done', worker_index))
-
-            except Exception as e:
-                print(f"[ERROR] Worker-{worker_index}: Failed to process category '{category}': {e}")
-                traceback.print_exc()
-                # Signal failure to the main process
-                status_queue.put(('failed', worker_index))
-                break  # Exit the worker on failure
-
-    except Exception as e:
-        print(f"[ERROR] Worker-{worker_index}: Initialization failed: {e}")
-        traceback.print_exc()
-        # Signal failure to the main process
-        status_queue.put(('failed', worker_index))
-
+        yield
     finally:
+        sys.stdout, sys.stderr = old_stdout, old_stderr
+
+
+def worker_process(task_queue, status_queue, detected_image_urls, worker_index, captcha_event, site_info):
+    """
+    Worker process that pauses on CAPTCHA and resumes when CAPTCHA is resolved.
+    """
+    shop_name = site_info.get("name", "unknown_shop")
+
+    logger = setup_logging(worker_index, shop_name)
+
+    def log_message(message):
+        logger.info(message)
+
+    with redirect_stdout_stderr(worker_index, log_message):
+        print(f"Starting Worker-{worker_index} for shop '{shop_name}' and creating temporary directory.")
+        temp_dir = tempfile.mkdtemp(prefix=f"worker_{worker_index}_")
+        print(f"Created temporary directory for Chrome instance: {temp_dir}")
+
+        scraper = None
+
         try:
-            if scraper:
-                scraper.close_driver()
-                print(f"[INFO] Worker-{worker_index}: Closed Chrome driver.")
-        except Exception as e:
-            print(f"[WARNING] Worker-{worker_index}: Error closing driver: {e}")
-            traceback.print_exc()
+            print(f"Initializing GeneralizedScraper.")
+            scraper = GeneralizedScraper(shopping_website="", user_data_dir=temp_dir)
+            scraper.detected_image_urls = detected_image_urls
+
+            status_queue.put(('ready', worker_index))
+            print(f"Worker-{worker_index}: Ready to receive tasks.")
+
+            # Define the base path for saving data in the 'data' repository
+            base_data_path = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "../../../../Data/scrapped_data")
+            )
+            # print(f"Worker-{worker_index}: Base data path: {base_data_path}")
+            os.makedirs(base_data_path, exist_ok=True)  # Ensure the directory exists
+
+            while True:
+                task = task_queue.get()
+                if task is None:
+                    print(f"Worker-{worker_index}: Received termination signal. Exiting.")
+                    break
+
+                site_info, category, product_chunk = task
+                try:
+                    site_name = site_info.get("name", "unknown_site")
+                    home_url = site_info.get("home_url", "")
+                    search_url_template = site_info.get("search_url_template", "")
+
+                    if scraper.shopping_website != home_url:
+                        scraper.shopping_website = home_url
+                        if not scraper.open_home_page(home_url):
+                            raise Exception(f"Failed to open home page for {site_name}")
+
+                    print(f"***** Worker-{worker_index} processing category '{category}' on '{site_name}' *****")
+
+                    for product in product_chunk:
+                        try:
+                            print(f"Searching for product: {product}")
+                            search_url = search_url_template.format(
+                                base_url=home_url,
+                                query=product.replace(" ", "+"),
+                                page_number="{page_number}"
+                            )
+
+                            scraper.open_search_url(search_url.format(page_number=1))
+                            soup = scraper.extract_page_structure()
+
+                            if scraper.is_captcha_present(soup):
+                                print(f"[CAPTCHA] CAPTCHA detected!")
+                                status_queue.put(('captcha', worker_index))
+
+                                print(f"[CAPTCHA] Worker-{worker_index} is waiting for CAPTCHA resolution.")
+                                captcha_event.wait()
+                                captcha_event.clear()
+
+                                print(f"CAPTCHA resolved. Resuming task...")
+                                continue
+
+                            # Define the save path inside the 'data' repository
+                            save_dir = os.path.join(base_data_path, f"{shop_name}", f"{category}")
+                            os.makedirs(save_dir, exist_ok=True)
+                            save_path = os.path.join(save_dir, f"{product}.csv")
+                            scraper.scrape_all_products(scroll_based=True, url_template=search_url, page_number_supported=True)
+                            scraper.save_to_csv(save_path=save_path, category=category)
+                            scraper.stored_products.clear()
+
+                            print(f"Saved scraped data to: {save_path}")
+
+                        except Exception as e:
+                            print(f"Error scraping product '{product}': {e}")
+                            traceback.print_exc()
+
+                    status_queue.put(('done', worker_index))
+
+                except Exception as e:
+                    print(f"Failed to process category '{category}': {e}")
+                    traceback.print_exc()
+                    status_queue.put(('failed', worker_index))
+                    break
+
+        finally:
+            try:
+                if scraper:
+                    scraper.close_driver()
+                    print(f"Closed Chrome driver.")
+            except Exception as e:
+                print(f"Error closing driver: {e}")
+                traceback.print_exc()
 
 
 def main_scraper(site_info, categories_amazon_products, n_workers=2):
     """
-    Manages the distributed web scraping process by coordinating multiple worker processes.
-    Initializes all workers upfront, handles initialization failures, assigns scraping tasks per category,
-    and ensures synchronization after each category is processed.
-
-    This function performs the following steps:
-        1. Initializes a multiprocessing manager and shared data structures.
-        2. Starts the specified number of worker processes.
-        3. Monitors the initialization status of each worker.
-        4. Assigns product scraping tasks to active workers for each category.
-        5. Waits for all workers to complete their tasks for the current category.
-        6. Handles worker failures by excluding failed workers from future tasks.
-        7. Terminates all worker processes gracefully after all categories are processed.
-
-    Args:
-        site_info (dict): Dictionary containing information about the shopping site, including
-                          'name', 'home_url', and 'search_url_template'.
-        categories_amazon_products (dict): Dictionary where keys are category names and values
-                                           are lists of product names to scrape within each category.
-        n_workers (int, optional): Number of worker processes to spawn. Defaults to 2.
-
-    Returns:
-        None
-
-    Raises:
-        None: All exceptions are handled within the worker and main scraper functions.
+    Manages worker processes and handles CAPTCHA resolution.
     """
     print("[INFO] MainScraper: Starting main scraper.")
     manager = Manager()
     detected_image_urls = manager.list()
 
-    # Initialize task and status queues for inter-process communication
     task_queue = Queue()
     status_queue = Queue()
+    captcha_events = {i: manager.Event() for i in range(n_workers)}
 
     workers = []
     active_workers = set()
 
-    # Step 1: Initialize all worker processes
     print(f"[INFO] MainScraper: Initializing {n_workers} workers.")
     for i in range(n_workers):
         process = Process(
             target=worker_process,
-            args=(task_queue, status_queue, detected_image_urls, i)
+            args=(task_queue, status_queue, detected_image_urls, i, captcha_events[i], site_info)
         )
         workers.append(process)
         process.start()
-        print(f"[INFO] MainScraper: Started Worker-{i} with PID {process.pid}")
-        # Small delay to stagger worker initialization and prevent resource contention
-        time.sleep(5)
+        time.sleep(2)
 
-    # Step 2: Monitor and collect the readiness status of each worker
     for i in range(n_workers):
         try:
-            status, worker_index = status_queue.get(timeout=30)  # Wait up to 30 seconds for workers to respond
+            status, worker_index = status_queue.get(timeout=30)
             if status == 'ready':
                 active_workers.add(worker_index)
                 print(f"[INFO] MainScraper: Worker-{worker_index} is ready.")
-            elif status == 'failed':
-                print(f"[ERROR] MainScraper: Worker-{worker_index} failed to initialize and will be excluded.")
         except:
             print("[ERROR] MainScraper: Timeout waiting for worker status. Exiting.")
             break
@@ -180,53 +233,42 @@ def main_scraper(site_info, categories_amazon_products, n_workers=2):
 
     print(f"[INFO] MainScraper: Active workers: {sorted(active_workers)}")
 
-    # Step 3: Iterate over each product category to be scraped
     for category, products in categories_amazon_products.items():
         print(f"\n[INFO] MainScraper: Starting category: {category}")
+        product_chunks = [[] for _ in active_workers]
 
-        # Update the number of active workers
-        current_n_workers = len(active_workers)
-        if current_n_workers == 0:
-            print("[CRITICAL] MainScraper: No active workers remaining. Exiting scraper.")
-            break
-
-        # Divide the products evenly across active workers
-        product_chunks = [[] for _ in range(current_n_workers)]
         for idx, product in enumerate(products):
-            worker_idx = idx % current_n_workers
+            worker_idx = idx % len(active_workers)
             product_chunks[worker_idx].append(product)
 
-        # Assign each worker its chunk of products for the current category
-        worker_indices = sorted(active_workers)  # Sorting for consistent assignment
-        for i, worker_index in enumerate(worker_indices):
+        for i, worker_index in enumerate(sorted(active_workers)):
             task = (site_info, category, product_chunks[i])
             task_queue.put(task)
             print(f"[INFO] MainScraper: Assigned {len(product_chunks[i])} products to Worker-{worker_index}")
 
-        # Step 4: Wait for all workers to complete their tasks for the current category
         completed_workers = set()
-        while len(completed_workers) < current_n_workers:
-            try:
-                status, worker_index = status_queue.get()  # Remove the timeout parameter
-                if status == 'done':
-                    print(f"[INFO] MainScraper: Worker-{worker_index} completed category '{category}'.")
-                    completed_workers.add(worker_index)
-                elif status == 'failed':
-                    print(f"[ERROR] MainScraper: Worker-{worker_index} failed during processing.")
-                    active_workers.discard(worker_index)
-                    completed_workers.add(worker_index)
-            except Exception as e:
-                print(f"[ERROR] MainScraper: Unexpected error: {e}")
-                break
+        while len(completed_workers) < len(active_workers):
+            status, worker_index = status_queue.get()
 
-        print(f"[INFO] MainScraper: Finished category: {category}, moving to the next.")
+            if status == 'done':
+                print(f"[INFO] MainScraper: Worker-{worker_index} completed its task.")
+                completed_workers.add(worker_index)
+            elif status == 'captcha':
+                print(f"[CAPTCHA] MainScraper: Worker-{worker_index} requires CAPTCHA resolution.")
+                print(f"Resolve CAPTCHA for Worker-{worker_index} and press Enter to continue.")
+                input("Press Enter to continue...")
+                captcha_events[worker_index].set()
+            elif status == 'failed':
+                print(f"[ERROR] MainScraper: Worker-{worker_index} failed.")
+                active_workers.discard(worker_index)
+                completed_workers.add(worker_index)
 
-    # Step 5: Terminate all worker processes gracefully
+        print(f"[INFO] MainScraper: Finished category: {category}")
+
     print("[INFO] MainScraper: Terminating all workers.")
     for _ in workers:
-        task_queue.put(None)  # Sentinel value to signal workers to terminate
+        task_queue.put(None)
 
-    # Ensure all worker processes have terminated
     for process in workers:
         process.join()
         print(f"[INFO] MainScraper: Worker PID {process.pid} has terminated.")
@@ -235,21 +277,23 @@ def main_scraper(site_info, categories_amazon_products, n_workers=2):
 
 
 if __name__ == "__main__":
-    # Ensure that the multiprocessing start method is set to 'spawn' for compatibility
+    # Set the start method to "spawn" for compatibility with Windows
     set_start_method("spawn", force=True)
 
+    # Define shopping sites to scrape
     shopping_sites = [
-        {
-            "name": "ebay",
-            "home_url": "https://www.ebay.com",
-            "search_url_template": "{base_url}/sch/i.html?_nkw={query}&_pgn={{page_number}}"
-        }
+        {"name": "aliexpress",
+         "home_url": "https://www.aliexpress.com",
+         "search_url_template": '{base_url}/w/wholesale-{query}.html?page={{page_number}}'},
     ]
 
-    from UniversalWebshopScraper.generalized_scrapper.core.product_categories import categories_products
+    # Import the product categories for scraping
+    # from UniversalWebshopScraper.generalized_scrapper.core.product_categories import categories_products
+    from UniversalWebshopScraper.generalized_scrapper.checker.missing_products import categories_products
 
-    n_workers = 10  # Define the number of workers
+    n_workers = 10  # Number of workers to spawn
 
+    # Loop through the shopping sites and start the scraper
     for site_info in shopping_sites:
         main_scraper(site_info, categories_products, n_workers=n_workers)
 
