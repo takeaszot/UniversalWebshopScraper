@@ -25,7 +25,6 @@ CURRENCY_PATTERN = r"(\$|€|£|zł|PLN|USD|GBP|JPY|AUD)"
 PRICE_PATTERN = r"(\d+(?:[.,]\d{3})*(?:[.,]\d\d))"
 COST_PATTERN = rf"{PRICE_PATTERN}\s*{CURRENCY_PATTERN}|{CURRENCY_PATTERN}\s*{PRICE_PATTERN}"
 
-
 class GeneralizedScraper:
     """
     A class to initialize and manage a web scraper for e-commerce websites, with
@@ -36,51 +35,41 @@ class GeneralizedScraper:
         shopping_website (str, optional): The URL of the shopping website to scrape.
         user_data_dir (str, optional): The directory path for storing user data, allowing
                                        persistence of session information between scrapes.
+        initialize_driver_func (callable, optional): Custom function to initialize the WebDriver.
     """
-    def __init__(self, shopping_website=None, user_data_dir=None, offline_mode=False):
+    def __init__(self, shopping_website=None, user_data_dir=None, offline_mode=False, initialize_driver_func=None):
         """
-         Initializes the GeneralizedScraper instance with necessary attributes
-         for web scraping operations.
+        Initializes the GeneralizedScraper instance with necessary attributes
+        for web scraping operations.
 
-         This includes setting up a Selenium WebDriver instance, initializing sets and
-         lists to store product and CAPTCHA information, and setting up configurations
-         specific to the shopping website.
+        This includes setting up a Selenium WebDriver instance, initializing sets and
+        lists to store product and CAPTCHA information, and setting up configurations
+        specific to the shopping website.
 
-         Args:
-             shopping_website (str, optional): The URL of the shopping website.
-             user_data_dir (str, optional): Directory for storing user data, enabling
+        Args:
+            shopping_website (str, optional): The URL of the shopping website.
+            user_data_dir (str, optional): Directory for storing user data, enabling
                                             persistence of session information.
-         """
+            initialize_driver_func (callable, optional): A custom function to initialize the WebDriver.
+        """
         self.shopping_website = shopping_website  # The URL of the shopping website
         self.user_data_dir = user_data_dir  # Directory for storing user data
+        self.initialize_driver_func = initialize_driver_func  # Custom or default driver initializer
         if offline_mode:
             self.driver = None
         else:
-            self.driver = self.initialize_driver()  # Initialize the Chrome WebDriver
+            if self.initialize_driver_func:
+                self.driver = self.initialize_driver_func(self)  # Use the provided custom driver initializer
+            else:
+                self.driver = self.default_initialize_driver()  # Use the default driver initializer
+
         self.marked_blocks = set()  # Set to store marked blocks
         self.detected_products = set()  # Set to store detected products
         self.wrong_titles = set()  # Set to store detected titles
         self.detected_image_urls = SortedSet()  # Ordered set for image URLs
-        self.parent_blocks = []  # change to set later, for now we use list to store all parent blocks to know how many we have
-        self.shopping_website = shopping_website  # The URL of the shopping website
+        self.parent_blocks = []  # List to store all parent blocks (convert to set later if needed)
         self.product_count = 0  # Counter for the number of products detected
         self.stored_products = []  # List to store gathered products (dict format)
-
-    '''def initialize_driver(self):
-        """
-        Initialize the Chrome driver with necessary options for avoiding CAPTCHA detection.
-        Returns:
-            driver: The initialized Chrome driver with customized options.
-        """
-        options = uc.ChromeOptions()
-        user_data_dir = 
-        profile = "Profile 2"
-        options.add_argument(f"user-data-dir={user_data_dir}")
-        options.add_argument(f"profile-directory={profile}")
-        options.add_argument('--disable-blink-features=AutomationControlled')
-        driver = uc.Chrome(options=options)
-        return driver'''
-    # r"C:\Users\<YourUsername>\AppData\Local\Google\Chrome\User Data"
 
     def initialize_driver(self):
         """
@@ -831,11 +820,16 @@ if __name__ == "__main__":
         scraper.close_driver()
         return new_method_count
 
+    from UniversalWebshopScraper.generalized_scrapper.core.initialize_driver import initialize_driver_single
     ### Test Aliexpress (scroll-based) ###
     home_url_aliexpress = "https://www.aliexpress.com"
     aliexpress_search_url_template = "{home_url}/w/wholesale-{query}.html?page={{page_number}}".format(home_url=home_url_aliexpress, query=search_query.replace(" ", "+"))
 
-    scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
+
+    scraper = GeneralizedScraper(
+        shopping_website=home_url_aliexpress,
+        initialize_driver_func=initialize_driver_single
+    )
     new_aliexpress_count = run_new_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products_new.csv', scroll_based=True, page_number_supported=True)
     print(f"New Aliexpress product count: {new_aliexpress_count}")
 
@@ -844,7 +838,11 @@ if __name__ == "__main__":
     temu_search_url_template = "{base_url}/search_result.html?search_key={query}&search_method=user".format(
         base_url=home_url_temu, query=search_query.replace(" ", "+"))
 
-    scraper = GeneralizedScraper(shopping_website=home_url_temu)
+    scraper = GeneralizedScraper(
+        shopping_website=home_url_temu,
+        initialize_driver_func=initialize_driver_single
+    )
+
     new_temu_count = run_new_method(scraper, temu_search_url_template, home_url_temu, 'temu_products_new.csv', scroll_based=True, page_number_supported=False)
     print(f"New Temu product count: {new_temu_count}")
 
@@ -853,7 +851,10 @@ if __name__ == "__main__":
     # Corrected URL template with double curly braces for page_number
     allegro_search_url_template = f'{home_url_allegro}/listing?string={search_query.replace(" ", "+")}&p={{page_number}}'
 
-    scraper = GeneralizedScraper(shopping_website=home_url_allegro)
+    scraper = GeneralizedScraper(
+        shopping_website=home_url_allegro,
+        initialize_driver_func=initialize_driver_single
+    )
     new_allegro_count = run_new_method(scraper, allegro_search_url_template, home_url_allegro,
                                        'allegro_products_new.csv', scroll_based=True, page_number_supported=True)
     print(f"New Allegro product count: {new_allegro_count}")
@@ -863,7 +864,10 @@ if __name__ == "__main__":
     ebay_search_url_template = "{base_url}/sch/i.html?_nkw={query}&_pgn={{page_number}}".format(
         base_url=home_url_ebay, query=search_query.replace(" ", "+"))
 
-    scraper = GeneralizedScraper(shopping_website=home_url_ebay)
+    scraper = GeneralizedScraper(
+        shopping_website=home_url_ebay,
+        initialize_driver_func=initialize_driver_single
+    )
     new_ebay_count = run_new_method(scraper, ebay_search_url_template, home_url_ebay, 'ebay_products_new.csv', scroll_based=True, page_number_supported=True)
     print(f"New eBay product count: {new_ebay_count}")
 
@@ -871,7 +875,10 @@ if __name__ == "__main__":
     home_url_aliexpress = "https://www.aliexpress.com"
     aliexpress_search_url_template = "{home_url}/w/wholesale-{query}.html?page={{page_number}}".format(home_url=home_url_aliexpress, query=search_query.replace(" ", "+"))
 
-    scraper = GeneralizedScraper(shopping_website=home_url_aliexpress)
+    scraper = GeneralizedScraper(
+        shopping_website=home_url_aliexpress,
+        initialize_driver_func=initialize_driver_single
+    )
     new_aliexpress_count = run_new_method(scraper, aliexpress_search_url_template, home_url_aliexpress, 'aliexpress_products_new.csv', scroll_based=True, page_number_supported=True)
     print(f"New Aliexpress product count: {new_aliexpress_count}")
 
@@ -879,6 +886,9 @@ if __name__ == "__main__":
     home_url_amazon = "https://www.amazon.com"
     amazon_search_url_template = "{base_url}/s?k={query}&page={{page_number}}".format(base_url=home_url_amazon, query=search_query.replace(" ", "+"))
 
-    scraper = GeneralizedScraper(shopping_website=home_url_amazon)
+    scraper = GeneralizedScraper(
+        shopping_website=home_url_amazon,
+        initialize_driver_func=initialize_driver_single
+    )
     new_amazon_count = run_new_method(scraper, amazon_search_url_template, home_url_amazon, 'amazon_products_new.csv', scroll_based=True, page_number_supported=True)
     print(f"New Amazon product count: {new_amazon_count}")
