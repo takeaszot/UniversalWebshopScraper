@@ -23,7 +23,7 @@ from UniversalWebshopScraper.generalized_scrapper.core.functions import normaliz
 # Define the patterns for detecting prices and currencies should work for all currencies and prices with or without commas
 CURRENCY_PATTERN = r"(\$|€|£|zł|PLN|USD|GBP|JPY|AUD)"
 PRICE_PATTERN = r"(\d+(?:[.,]\d{3})*(?:[.,]\d\d))"
-COST_PATTERN = f"{PRICE_PATTERN}\s*{CURRENCY_PATTERN}|{CURRENCY_PATTERN}\s*{PRICE_PATTERN}"
+COST_PATTERN = rf"{PRICE_PATTERN}\s*{CURRENCY_PATTERN}|{CURRENCY_PATTERN}\s*{PRICE_PATTERN}"
 
 
 class GeneralizedScraper:
@@ -644,15 +644,16 @@ class GeneralizedScraper:
             save_path (str): The file path to save the CSV file.
         """
         if self.stored_products:
-            # Extract website name from the URL for folder naming
-            website_name = self.shopping_website.replace("https://", "").replace("www.", "").split('.')[0]
+            if not save_path:
+                # Extract website name from the URL for folder naming
+                website_name = self.shopping_website.replace("https://", "").replace("www.", "").split('.')[0]
 
-            # Create directory for the specific website inside the 'scraped_data' folder
-            save_dir = os.path.join('../scraped_data', website_name, category)
+                # Create directory for the specific website inside the 'scraped_data' folder
+                save_dir = os.path.join('../scraped_data', website_name, category)
 
-            # Create the directory if it doesn't exist
-            if not os.path.exists(save_dir):
-                os.makedirs(save_dir)
+                # Create the directory if it doesn't exist
+                if not os.path.exists(save_dir):
+                    os.makedirs(save_dir)
 
             # Create the full path for the CSV file
             csv_filename = f'{save_path}' if save_path else f'{website_name}_products.csv'

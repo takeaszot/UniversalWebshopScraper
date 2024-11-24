@@ -288,7 +288,8 @@ if __name__ == "__main__":
     ]
 
     # Import the product categories for scraping
-    from UniversalWebshopScraper.generalized_scrapper.core.product_categories import categories_products
+    # from UniversalWebshopScraper.generalized_scrapper.core.product_categories import categories_products
+    from UniversalWebshopScraper.generalized_scrapper.checker.missing_products import categories_products
 
     n_workers = 10  # Number of workers to spawn
 
