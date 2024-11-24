@@ -71,7 +71,7 @@ class GeneralizedScraper:
         self.product_count = 0  # Counter for the number of products detected
         self.stored_products = []  # List to store gathered products (dict format)
 
-    def initialize_driver(self):
+    def default_initialize_driver(self):
         """
         Sets up a Selenium WebDriver instance using undetected-chromedriver, configured
         to avoid detection on sites with anti-bot measures and simulate foreground behavior.
