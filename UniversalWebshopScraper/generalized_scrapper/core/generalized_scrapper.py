@@ -633,26 +633,31 @@ class GeneralizedScraper:
             save_path (str): The file path to save the CSV file.
         """
         if self.stored_products:
-            if not save_path:
+            if save_path:
+                # Use provided save_path directly
+                save_dir = os.path.dirname(save_path)
+                csv_filename = os.path.basename(save_path)
+            else:
                 # Extract website name from the URL for folder naming
                 website_name = self.shopping_website.replace("https://", "").replace("www.", "").split('.')[0]
 
                 # Create directory for the specific website inside the 'scraped_data' folder
-                save_dir = os.path.join('../scraped_data', website_name, category)
+                save_dir = os.path.join('../scraped_data', website_name, category or "general")
+                os.makedirs(save_dir, exist_ok=True)
 
-                # Create the directory if it doesn't exist
-                if not os.path.exists(save_dir):
-                    os.makedirs(save_dir)
+                # Create a default filename
+                csv_filename = f'{website_name}_products.csv'
 
-            # Create the full path for the CSV file
-            csv_filename = f'{save_path}' if save_path else f'{website_name}_products.csv'
+            # Construct the full save path
             save_path = os.path.join(save_dir, csv_filename)
 
             # Save the products to the CSV file
-            df = pd.DataFrame(self.stored_products)
-            df.to_csv(save_path, index=False)
-
-            print(f"Saved {len(self.stored_products)} products to {save_path}")
+            try:
+                df = pd.DataFrame(self.stored_products)
+                df.to_csv(save_path, index=False)
+                print(f"Saved {len(self.stored_products)} products to {save_path}")
+            except Exception as e:
+                print(f"Error saving file to {save_path}: {e}")
         else:
             print("No products to save.")
 
