@@ -286,16 +286,18 @@ class GeneralizedScraper:
         soup = BeautifulSoup(self.driver.page_source, 'html.parser')
         return soup
 
-    def store_product(self, product_url, image_url, price, currency, title):
+    def store_product(self, product_url, image_url, price, currency, title, all_product_urls, all_image_urls):
         """
-        Store the product information in a list of dictionaries.
+        Store the product information in a list of dictionaries, including all links and images.
 
         Args:
-            product_url (str): URL of the product.
-            image_url (str): URL of the product image.
+            product_url (str): Primary product URL.
+            image_url (str): Primary image URL.
             price (str): Price of the product.
             currency (str): Currency of the product price.
             title (str): Title of the product.
+            all_product_urls (list): All related product URLs.
+            all_image_urls (list): All related image URLs.
         """
         self.stored_products.append({
             "Website": self.shopping_website,
@@ -303,7 +305,9 @@ class GeneralizedScraper:
             "Image URL": image_url,
             "Price": price,
             "Currency": currency,
-            "Title": title
+            "Title": title,
+            "All Links": '|'.join(all_product_urls),  # Combine all product URLs with a delimiter
+            "All Images": '|'.join(all_image_urls)  # Combine all image URLs with a delimiter
         })
 
     @profile
@@ -325,7 +329,7 @@ class GeneralizedScraper:
         blocks.sort(key=lambda x: len(list(x.parents)), reverse=True)
 
         # how many block
-        #print(f"Number of blocks: {len(blocks)}")
+        # print(f"Number of blocks: {len(blocks)}")
 
         # Step 3: Iterate through each block to identify and process those containing product data.
         for block in blocks:
@@ -347,8 +351,8 @@ class GeneralizedScraper:
             self.mark_and_block(block)
 
             # Step 6: Output basic information about detected products for debugging purposes.
-            #print(f'number of product urls: {len(product_urls) if product_urls else 0}')
-            #print(f'number of image urls: {len(image_urls) if image_urls else 0}')
+            # print(f'number of product urls: {len(product_urls) if product_urls else 0}')
+            # print(f'number of image urls: {len(image_urls) if image_urls else 0}')
 
             # Step 7: Extract the main product URL, image URL, price, and currency.
             # We assume the first URL and image in the list are the main ones for the product.
@@ -366,7 +370,12 @@ class GeneralizedScraper:
                     self.detected_image_urls.append(url)
 
             # Step 9: Store the product data in a list, ready for future saving to CSV or other storage.
-            self.store_product(product_url, image_url, price, currency, title)
+            # Include all product URLs and all image URLs as delimited strings.
+            self.store_product(
+                product_url, image_url, price, currency, title,
+                all_product_urls=product_urls,  # Pass all product URLs
+                all_image_urls=image_urls  # Pass all image URLs
+            )
 
             # Step 10: Add a simplified version of the block’s structure to the parent_blocks set.
             # This is primarily for tracking and reporting purposes.
