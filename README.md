@@ -15,27 +15,7 @@ This section provides a step-by-step guide to set up and run the **UniversalWebs
 
 ### Project Setup
 
-Follow these steps to set up the project on your local machine:
-
-1. **Clone the Repository**
-
-   Clone this repository to your local machine using the following command:
-
-   ```bash
-   git clone https://github.com/takeaszot/UniversalWebshopScraper.git
-   ```
-Navigate to the Project Directory
-
-bash
-Copy code
-cd UniversalWebshopScraper
-Install Required Python Packages
-
-Make sure you have pip installed, then install the dependencies:
-
-bash
-Copy code
-pip install -r requirements.txt
+For the organization setup process, please check out the [OrgSetup repository](https://github.com/Takeaszot/OrgSetup) for detailed steps and scripts.
 
 
 ## Project Overview
@@ -47,33 +27,41 @@ pip install -r requirements.txt
 ## Folder Structure
 
 ```bash
-UniversalWebshopScraper
+
+Parent Directory/
 │
-├── .venv/                           # Virtual environment folder
-├── scraped_data/                    # Folder to store scraped CSV files organized by category/website
-├── tests/                           # Folder for unit tests (TBD)
+├── Data/                           # External repository for storing all data
+│   ├── scrapped_data/              # Folder inside the Data repository for storing scraped data
+│   └── (other files)               # other data files 
 │
-├── UniversalWebshopScraper
-│   ├── generalized_scraper           # Main scraping module
-│   │
-│   ├── AI_searcher/
-│   │   └── AI_searcher.py             # Placeholder for future AI-based keyword expansion
-│   │
-│   ├── core/
-│   │   ├── functions.py               # Utility functions for URL normalization and other helpers
-│   │   ├── generalized_scraper.py     # Main generalized scraper class and methods
-│   │   ├── product_categories.py      # Contains product categories and keywords for searching
-│   │   └── trash_filtering.py         # Placeholder for filtering irrelevant content from results
-│   │
-│   ├── scraped_data/                  # Output directory for storing scraped data organized by website
-│   │
-│   ├── scripts/
-│   │   ├── mock_db_generalized_scrapper.py         # Single-threaded scraper for one shop
-│   │   ├── mock_db_generalized_scrapper_multiple_shops.py  # Multi-shop, one thread per shop scraper
-│   │   └── turbo_generalized_scrapper_1_shop.py    # Multi-threaded, single shop high-speed scraper
-│   │
-│   └── specific_scrapers/           # Folder for any specific scrapers not covered by the generalized scraper
-│
-├── .gitignore                       # Git ignore file to exclude unnecessary files
-├── README.md                        # Documentation for the project setup, structure, and usage
-└── requirements.txt                 # Required Python packages for the project
+└── UniversalWebshopScraper/
+    ├── tests/                     # Folder for unit tests
+    │
+    ├── UniversalWebshopScraper/   # Main project directory
+    │   ├── generalized_scraper/   # Generalized scraper module
+    │   │   ├── AI_searcher/       # AI-based keyword expansion module
+    │   │   │
+    │   │   ├── checker/           # Module for validation and checking
+    │   │   │
+    │   │   ├── core/              # Core utilities and modules
+    │   │   │   └── generalized_scraper.py # Main generalized scraper class and methods
+    │   │   │
+    │   │   ├── scraped_logs/      # Folder for storing scraping logs
+    │   │   │
+    │   │   └── scripts/           # Scripts for various scraping workflows
+    │   │
+    │   └── specific_scrapers/     # Specific scrapers for individual websites
+    │
+    └── README.md                  # Documentation for the project setup, structure, and usage
+
+```
+
+### Data Storage
+
+The scraped data for this project is stored in a separate repository, not within the `UniversalWebshopScraper` directory.
+
+#### Location of Data Repository
+
+The data is stored in the following repository:  
+[Data Repository](https://github.com/takeaszot/Data)
+
