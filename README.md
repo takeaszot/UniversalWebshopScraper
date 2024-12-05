@@ -2,7 +2,7 @@
 
 **Author**: Jmask  
 **Project**: Universal Web Scraping Framework  
-**Startup Company**: [Startup Company Name]
+**Startup Company**: [PlaceHolder]
 
 ## Getting Started
 
