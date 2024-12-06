@@ -23,8 +23,6 @@ if __name__ == "__main__":
             "home_url": "https://www.aliexpress.com",
             "search_url_template": '{base_url}/w/wholesale-{query}.html?page={{page_number}}'
         },
-        
-
         {
             "name": "ebay",
             "home_url": home_url_ebay,
@@ -37,18 +35,22 @@ if __name__ == "__main__":
         }'''
     ]
 
-    save_path = "../scraped_data"
-    os.makedirs(save_path, exist_ok=True)
+    base_data_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../../../Data/scrapped_data")
+    )
+    os.makedirs(base_data_path, exist_ok=True)  # Ensure the directory exists
+
+    from UniversalWebshopScraper.generalized_scrapper.core.initialize_driver import initialize_driver_single
 
     for site_info in shopping_sites:
-        site_name = site_info["name"].lower()
-        scraper = GeneralizedScraper(shopping_website=site_info["home_url"])
+        shop_name = site_info["name"].lower()
+        scraper = GeneralizedScraper(shopping_website=site_info["home_url"], initialize_driver_func=initialize_driver_single)
         scraper.open_home_page(site_info["home_url"])
         home_url = site_info["home_url"]
-        print(f"***** Starting search on {site_name} *****")
+        print(f"***** Starting search on {shop_name} *****")
 
         # Directory for the specific site
-        site_save_path = os.path.join(save_path, site_name)
+        site_save_path = os.path.join(base_data_path, shop_name)
         os.makedirs(site_save_path, exist_ok=True)
 
         # Loop through each category and product
@@ -66,21 +68,22 @@ if __name__ == "__main__":
                     base_url=home_url, query=product.replace(" ", "+"), page_number="{page_number}")
 
                 scraper.open_search_url(search_url.format(page_number=1))
-                scraped_products = scraper.scrape_all_products(scroll_based=True, url_template=search_url,
-                                                               page_number_supported=True)
+                scraped_products = scraper.scrape_all_products(scroll_based=True,
+                                                               max_pages=50,
+                                                               url_template=search_url,
+                                                               page_number_supported=True,
+                                                               scroll_length=3000,
+                                                               max_scrolls=10)
 
-                # Save each product immediately after it is scraped
-                for product_data in scraped_products:
-                    product_file = os.path.join(category_save_path, f"{product.replace(' ', '_')}.csv")
+                # Define the save path inside the 'data' repository
+                save_dir = os.path.join(base_data_path, f"{shop_name}", f"{category}")
+                os.makedirs(save_dir, exist_ok=True)
+                save_path = os.path.join(save_dir, f"{product}.csv")
+                scraper.scrape_all_products(scroll_based=True, url_template=search_url, page_number_supported=True)
+                scraper.save_to_csv(save_path=save_path, category=category)
+                scraper.stored_products.clear()
 
-                    # Save to a CSV file
-                    df = pd.DataFrame([product_data])
-
-                    # Append to the CSV file or create it if it doesn't exist
-                    if not os.path.exists(product_file):
-                        df.to_csv(product_file, index=False)
-                    else:
-                        df.to_csv(product_file, mode='a', header=False, index=False)
+                print(f"Saved scraped data to: {save_path}")
 
             print(f"Finished searching for category: {category}")
 
