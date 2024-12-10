@@ -200,6 +200,9 @@ class GeneralizedScraper:
             {'class': re.compile(r'baxia-punish', re.I)},  # AliExpress punish page
             {'id': re.compile(r'nc_\d+_nocaptcha', re.I)},  # NoCaptcha module
             {'class': re.compile(r'nc-container', re.I)},  # NoCaptcha container
+            {'id': re.compile(r'verification', re.I)},
+            {'class': re.compile(r'veriDialog', re.I)},
+            {'class': re.compile(r'slider', re.I)},
         ]
 
         # Check for elements matching the CAPTCHA selectors
