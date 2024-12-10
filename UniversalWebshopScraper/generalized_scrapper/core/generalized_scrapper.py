@@ -234,6 +234,7 @@ class GeneralizedScraper:
             "unusual traffic",  # Generic unusual traffic message
             "Sorry, we have detected unusual traffic",  # AliExpress-specific message
             "prove you're not a robot",  # Generic CAPTCHA message
+            "Security Verification",  # Generic security verification message
         ]
 
         for text in text_indicators:
