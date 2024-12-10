@@ -99,7 +99,6 @@ class GeneralizedScraper:
         options.add_argument("--disable-backgrounding-occluded-windows")
         options.add_argument("--disable-renderer-backgrounding")
         options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_argument("--force-device-scale-factor=1")
 
         # Optional: Enable debugging to analyze behavior
         # options.add_argument("--remote-debugging-port=9222")
@@ -124,7 +123,33 @@ class GeneralizedScraper:
 
         return driver
 
-    def random_delay(self, min_seconds=0, max_seconds=1):
+    def zoom_out_with_keys(self, times=5):
+        """
+        Zoom out the browser window using CTRL + '-' shortcut multiple times.
+
+        Args:
+            times (int): Number of times to zoom out (default: 5).
+        """
+        from selenium.webdriver.common.keys import Keys
+        try:
+            print(f"Zooming out {times} times using keyboard shortcuts.")
+
+            # Bring browser window into focus
+            self.driver.switch_to.window(self.driver.current_window_handle)
+
+            # Focus on the body element
+            body = self.driver.find_element("tag name", "body")
+            body.click()  # Ensure the body is clicked to receive keypresses
+
+            # Send zoom-out keypresses
+            for _ in range(times):
+                body.send_keys(Keys.CONTROL, Keys.SUBTRACT)  # Simulate CTRL + '-' keypress
+                self.random_delay(0.2, 0.5)  # Add a slight delay between keypresses
+            print(f"Successfully zoomed out {times} times.")
+        except Exception as e:
+            print(f"Failed to zoom out with keys: {e}")
+
+    def random_delay(self, min_seconds=1, max_seconds=4):
         """
         Introduces a random delay to mimic human-like browsing behavior
         and reduce the likelihood of detection by anti-bot systems.
@@ -175,6 +200,9 @@ class GeneralizedScraper:
             {'class': re.compile(r'baxia-punish', re.I)},  # AliExpress punish page
             {'id': re.compile(r'nc_\d+_nocaptcha', re.I)},  # NoCaptcha module
             {'class': re.compile(r'nc-container', re.I)},  # NoCaptcha container
+            {'id': re.compile(r'verification', re.I)},
+            {'class': re.compile(r'veriDialog', re.I)},
+            {'class': re.compile(r'slider', re.I)},
         ]
 
         # Check for elements matching the CAPTCHA selectors
@@ -209,6 +237,7 @@ class GeneralizedScraper:
             "unusual traffic",  # Generic unusual traffic message
             "Sorry, we have detected unusual traffic",  # AliExpress-specific message
             "prove you're not a robot",  # Generic CAPTCHA message
+            "Security Verification",  # Generic security verification message
         ]
 
         for text in text_indicators:
@@ -221,7 +250,8 @@ class GeneralizedScraper:
 
     def open_home_page(self, home_url):
         """
-        Open the homepage and handle CAPTCHA if detected.
+        Open the homepage, handle CAPTCHA if detected, and automatically zooms out after loading the page.
+        Waits for user input before starting scraping and moves the browser window off-screen.
 
         Args:
             home_url (str): The URL of the homepage.
@@ -230,12 +260,18 @@ class GeneralizedScraper:
             bool: True if the page opened successfully, False otherwise.
         """
         try:
+            print(f"Navigating to homepage: {home_url}")
+            self.driver.get(home_url)  # Navigate to the homepage
+            self.random_delay()  # Add a delay to simulate human-like behavior
+
+            # Zoom out using keyboard shortcuts
+            # self.zoom_out_with_keys(times=5)
+
+            # Extract the page structure to check for CAPTCHA
             soup = self.extract_page_structure()
             if self.is_captcha_present(soup):
                 input("Resolve Captcha and click enter button")
             return True
-
-
             self.driver.get(home_url)
             self.random_delay()
             soup = self.extract_page_structure()
@@ -243,7 +279,7 @@ class GeneralizedScraper:
                 input("Resolve Captcha and click enter button")
             return True
         except Exception as e:
-            print(f"Failed to navigate to the product URL: {e}")
+            print(f"Failed to open the homepage: {e}")
             return False
 
     def open_search_url(self, search_url):
@@ -299,6 +335,10 @@ class GeneralizedScraper:
             all_product_urls (list): All related product URLs.
             all_image_urls (list): All related image URLs.
         """
+        # Remove None values from the lists
+        sanitized_product_urls = [url for url in all_product_urls if url is not None]
+        sanitized_image_urls = [url for url in all_image_urls if url is not None]
+
         self.stored_products.append({
             "Website": self.shopping_website,
             "Product URL": product_url,
@@ -306,8 +346,8 @@ class GeneralizedScraper:
             "Price": price,
             "Currency": currency,
             "Title": title,
-            "All Links": '|'.join(all_product_urls),  # Combine all product URLs with a delimiter
-            "All Images": '|'.join(all_image_urls)  # Combine all image URLs with a delimiter
+            "All Links": '|'.join(sanitized_product_urls),  # Join sanitized product URLs
+            "All Images": '|'.join(sanitized_image_urls)  # Join sanitized image URLs
         })
 
     @profile
@@ -562,9 +602,15 @@ class GeneralizedScraper:
             full_price (str): The combined price and currency string.
 
         Returns:
-            tuple: A tuple of price and currency.
+            tuple: A tuple of price and currency, or (None, None) if extraction fails.
         """
         price = re.findall(COST_PATTERN, full_price)
+        if not price or len(price[0]) < 4:
+            # Handle cases where price extraction fails or format is unexpected
+            print(f"Warning: Unable to extract price and currency from '{full_price}'")
+            return None, None
+
+        # Safely access price and currency elements
         return price[0][0] + price[0][3], price[0][1] + price[0][2]
 
     @profile
@@ -679,7 +725,7 @@ class GeneralizedScraper:
         if self.driver:
             self.driver.quit()
 
-    def incremental_scroll_with_html_check(self, max_scrolls=10, scroll_pause_time=1):
+    def incremental_scroll_with_html_check(self, max_scrolls=10, scroll_pause_time=1, scroll_length=2000):
         """
         Scroll incrementally and check if more HTML is being loaded.
 
@@ -691,7 +737,7 @@ class GeneralizedScraper:
 
         for scroll in range(max_scrolls):
             # Scroll down incrementally
-            self.driver.execute_script("window.scrollBy(0, 2400);")
+            self.driver.execute_script(f"window.scrollBy(0, {scroll_length});")
             time.sleep(random.uniform(scroll_pause_time - 0.5, scroll_pause_time + 0.5))
 
             # Get the current page source and compare with the last
@@ -744,8 +790,8 @@ class GeneralizedScraper:
         #     print(title)
 
     @profile
-    def scrape_all_products(self, scroll_based=False, max_pages=99, max_scrolls=20, url_template=None,
-                            page_number_supported=True):
+    def scrape_all_products(self, scroll_based=False, max_pages=99, max_scrolls=50, url_template=None,
+                            page_number_supported=True, scroll_length=1000):
         """
         Scrape all products using pagination and scrolling if enabled.
 
@@ -774,7 +820,7 @@ class GeneralizedScraper:
 
             # Scroll down the page if scroll_based is True
             if scroll_based:
-                self.incremental_scroll_with_html_check(max_scrolls)  # Scroll down to load more products on the current page
+                self.incremental_scroll_with_html_check(max_scrolls, )  # Scroll down to load more products on the current page
 
             # Extract product blocks after scrolling
             soup = self.extract_page_structure()
