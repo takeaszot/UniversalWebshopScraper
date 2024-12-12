@@ -21,7 +21,7 @@ For the organization setup process, please check out the [OrgSetup repository](h
 
 ## Project Overview
 
-**UniversalWebshopScraper** is a flexible and efficient web scraping framework designed to extract product information from multiple online stores. The project utilizes modularized scripts for both single and multi-threaded scraping, enabling scalable data extraction from various e-commerce platforms. This README provides a comprehensive guide on the project structure, core modules, and usage.
+**UniversalWebshopScraper** is a flexible and efficient web scraping framework designed to extract product information from any online store. The project utilizes modularized scripts for both single and multi-threaded scraping, enabling scalable data extraction from any e-commerce platforms. This README provides a comprehensive guide on the project structure, core modules, and usage.
 
 ---
 
@@ -59,7 +59,7 @@ Parent Directory/
 
 ### Data Storage
 
-The scraped data for this project is stored in a separate repository, not within the `UniversalWebshopScraper` directory.
+The scraped data for this project is stored in a separate repository, not within the `UniversalWebshopScraper` directory. For the structure purpose. 
 
 #### Location of Data Repository
 
