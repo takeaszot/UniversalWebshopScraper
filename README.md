@@ -1,4 +1,5 @@
-# UniversalWebshopScraper
+# SCRAPPY
+### UniversalWebshopScraper
 
 **Author**: Jmask  
 **Project**: Universal Web Scraping Framework  
