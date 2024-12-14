@@ -85,7 +85,7 @@ def redirect_stdout_stderr(worker_index, log_func):
         sys.stdout, sys.stderr = old_stdout, old_stderr
 
 
-def worker_process(task_queue, status_queue, detected_image_urls, worker_index, captcha_event, site_info):
+def worker_process(task_queue, status_queue, detected_image_urls, worker_index, captcha_event, site_info, headless_mode=False):
     """
     Worker process that pauses on CAPTCHA and resumes when CAPTCHA is resolved.
     """
@@ -192,7 +192,7 @@ def worker_process(task_queue, status_queue, detected_image_urls, worker_index, 
                 traceback.print_exc()
 
 
-def main_scraper(site_info, categories_amazon_products, n_workers=2):
+def main_scraper(site_info, categories_products, n_workers=2):
     """
     Manages worker processes and handles CAPTCHA resolution.
     """
@@ -215,7 +215,7 @@ def main_scraper(site_info, categories_amazon_products, n_workers=2):
         )
         workers.append(process)
         process.start()
-        time.sleep(2)
+        time.sleep(3)
 
     for i in range(n_workers):
         try:
@@ -233,7 +233,7 @@ def main_scraper(site_info, categories_amazon_products, n_workers=2):
 
     print(f"[INFO] MainScraper: Active workers: {sorted(active_workers)}")
 
-    for category, products in categories_amazon_products.items():
+    for category, products in categories_products.items():
         print(f"\n[INFO] MainScraper: Starting category: {category}")
         product_chunks = [[] for _ in active_workers]
 
@@ -279,19 +279,27 @@ def main_scraper(site_info, categories_amazon_products, n_workers=2):
 if __name__ == "__main__":
     # Set the start method to "spawn" for compatibility with Windows
     set_start_method("spawn", force=True)
-
+    '''
     # Define shopping sites to scrape
     shopping_sites = [
         {"name": "aliexpress",
          "home_url": "https://www.aliexpress.com",
          "search_url_template": '{base_url}/w/wholesale-{query}.html?page={{page_number}}'},
     ]
+    '''
+
+    # Define shopping sites to scrape
+    shopping_sites = [
+        {"name": "ebay",
+         "home_url": "https://www.ebay.com",
+         "search_url_template": '{base_url}/sch/i.html?_nkw={query}&_pgn={{page_number}}&_ipg=240'},
+    ]
 
     # Import the product categories for scraping
-    # from UniversalWebshopScraper.generalized_scrapper.core.product_categories import categories_products
-    from UniversalWebshopScraper.generalized_scrapper.checker.missing_products import categories_products
+    from UniversalWebshopScraper.generalized_scrapper.core.product_categories import categories_products
+    # from UniversalWebshopScraper.generalized_scrapper.checker.missing_products import categories_products
 
-    n_workers = 10  # Number of workers to spawn
+    n_workers = 8  # Number of workers to spawn
 
     # Loop through the shopping sites and start the scraper
     for site_info in shopping_sites:
