@@ -85,43 +85,43 @@ UniversalWebshopScraper
 The **UniversalWebshopScraper** follows a multi-stage pipeline to scrape products from various e-commerce websites. Below is a high-level overview of the workflow:
 
 ```mermaid
-flowchart LR
+graph LR
 
-    %% Style Configuration
-    classDef startEnd fill=#4CAF50,stroke=#333,stroke-width=1px,color=#fff;
-    classDef process fill=#2196F3,stroke=#333,stroke-width=1px,color=#fff;
-    classDef decision fill=#FFC107,stroke=#333,stroke-width=1px,color=#fff;
-    classDef io fill=#9C27B0,stroke=#333,stroke-width=1px,color=#fff;
+classDef startEnd fill=#4CAF50,stroke=#333,stroke-width=1px,color=#fff;
+classDef process fill=#2196F3,stroke=#333,stroke-width=1px,color=#fff;
+classDef decision fill=#FFC107,stroke=#333,stroke-width=1px,color=#fff;
+classDef io fill=#9C27B0,stroke=#333,stroke-width=1px,color=#fff;
 
-    A[Start]:::startEnd --> B[Initialize Main Process]:::process
-    B --> C[Spawn Workers]:::process
-    C --> D[Are Workers Ready?]:::decision
-    D -->|Yes| E[Language Detection (Worker)]:::process
-    D -->|No| X[Exit with Error]:::startEnd
+A[Start] --> B[Initialize Main Process]
+B --> C[Spawn Workers]
+C --> D{Are Workers Ready?}
+D -->|Yes| E[Language Detection (Worker)]
+D -->|No| X[Exit with Error]
 
-    E --> F[Is Detected Language English?]:::decision
-    F -->|Yes| G[No Translation Needed]:::process
-    F -->|No| H[Initialize Translator]:::process
+E --> F{Is Detected Language English?}
+F -->|Yes| G[No Translation Needed]
+F -->|No| H[Initialize Translator]
 
-    G --> I[For Each Category: If Needed, Translate Products]:::process
-    H --> I[For Each Category: If Needed, Translate Products]:::process
+G --> I[For Each Category: If Needed, Translate Products]
+H --> I[For Each Category: If Needed, Translate Products]
 
-    I --> J[Distribute Category Tasks to Workers]:::process
-    J --> K[Workers Scrape Products]:::process
-    K --> L[CAPTCHA?]:::decision
+I --> J[Distribute Category Tasks to Workers]
+J --> K[Workers Scrape Products]
+K --> L{CAPTCHA?}
 
-    L -->|Yes| M[Wait for Manual CAPTCHA Resolution]:::process
-    M --> J[Resume After CAPTCHA Resolved]
-    L -->|No| N[Products Scraped]:::process
+L -->|Yes| M[Wait for Manual CAPTCHA Resolution]
+M --> J[Resume After CAPTCHA Resolved]
+L -->|No| N[Products Scraped]
 
-    N --> O[More Categories?]:::decision
-    O -->|Yes| I[Next Category]
-    O -->|No| P[Terminate Workers]:::process
+N --> O{More Categories?}
+O -->|Yes| I[Next Category]
+O -->|No| P[Terminate Workers]
 
-    P --> Q[Save Results (CSV)]:::io
-    Q --> R[End]:::startEnd
+P --> Q[Save Results (CSV)]
+Q --> R[End]
 
-    %% Apply classes to shapes
-    class A,R,X startEnd
-    class B,C,E,G,H,I,J,K,M,N,P,Q process
-    class D,F,L,O decision
+class A,R,X startEnd
+class B,C,E,G,H,I,J,K,M,N,P process
+class D,F,L,O decision
+class Q io
+```
