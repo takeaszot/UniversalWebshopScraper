@@ -85,45 +85,11 @@ UniversalWebshopScraper
 The **UniversalWebshopScraper** follows a multi-stage pipeline to scrape products. Below is a high-level overview of the workflow:
 
 ```mermaid
-graph LR
+flowchart LR
 
-    classDef startEnd fill:#4CAF50,stroke:#333,stroke-width:1px,color:#fff;
-    classDef process fill:#2196F3,stroke:#333,stroke-width:1px,color:#fff;
-    classDef decision fill:#FFC107,stroke:#333,stroke-width:1px,color:#fff;
-    classDef io fill:#9C27B0,stroke:#333,stroke-width:1px,color:#fff;
-
-    A[Start] --> B[Initialize Main Process]
-    B --> C[Spawn Workers]
-    C --> D{Are Workers Ready?}
-    D -->|Yes| E[Language Detection (Worker)]
-    D -->|No| X[Exit with Error]
-
-    E --> F{Is Detected Language English?}
-    F -->|Yes| G[No Translation Needed]
-    F -->|No| H[Initialize Translator]
-
-    G --> I[Translate Products if Needed]
-    H --> I[Translate Products if Needed]
-
-    I --> J[Distribute Category Tasks to Workers]
-    J --> K[Workers Scrape Products]
-    K --> L{CAPTCHA?}
-
-    L -->|Yes| M[Wait for Manual CAPTCHA Resolution]
-    M --> J[Resume After CAPTCHA Resolved]
-    L -->|No| N[Products Scraped]
-
-    N --> O{More Categories?}
-    O -->|Yes| I[Next Category]
-    O -->|No| P[Terminate Workers]
-
-    P --> Q[Save Results (CSV)]
-    Q --> R[End]
-
-    class A,R,X startEnd
-    class B,C,E,G,H,I,J,K,M,N,P process
-    class D,F,L,O decision
-    class Q io
+    A[Start] --> B[Language Detection]
+    B --> C[Translate Category]
+    C --> D[Split Words to Scrape]
                     
 
 ```
