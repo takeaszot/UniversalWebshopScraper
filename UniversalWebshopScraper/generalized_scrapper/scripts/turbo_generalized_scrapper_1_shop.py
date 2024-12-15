@@ -210,7 +210,9 @@ def worker_process(task_queue, status_queue, detected_image_urls, worker_index, 
 
 def main_scraper(site_info, categories_amazon_products, n_workers=2):
     """
-    Manages worker processes, detects language, translates search terms, and then scrapes.
+    Manages worker processes, detects language, and then scrapes categories one by one.
+    Before scraping each category, if translation is needed, it will translate that category's products.
+    This avoids translating all categories upfront and only translates when required.
     """
     print("[INFO] MainScraper: Starting main scraper.")
     manager = Manager()
@@ -250,8 +252,7 @@ def main_scraper(site_info, categories_amazon_products, n_workers=2):
 
     print(f"[INFO] MainScraper: Active workers: {sorted(active_workers)}")
 
-    # STEP 1: DETECT LANGUAGE
-    # We'll pick the first active worker to detect language
+    # STEP 1: DETECT LANGUAGE using the first active worker
     detect_worker = sorted(active_workers)[0]
     print(f"[INFO] MainScraper: Using Worker-{detect_worker} to detect language.")
 
@@ -279,7 +280,6 @@ def main_scraper(site_info, categories_amazon_products, n_workers=2):
 
     if not language or language.lower() == 'unknown':
         print("[WARNING] Could not detect language. Defaulting to English search terms.")
-        # If we cannot detect language, proceed without translation
         target_language = 'en'
     else:
         # Convert language name to ISO 639-1 code
@@ -292,48 +292,47 @@ def main_scraper(site_info, categories_amazon_products, n_workers=2):
 
     print(f"[INFO] MainScraper: Detected language code: {target_language}")
 
-    # STEP 2: TRANSLATE SEARCH TERMS IN MAIN PROCESS
+    # Initialize translator only if needed
     if target_language != 'en':
-        print(f"[INFO] MainScraper: Translating search terms from 'en' to '{target_language}'...")
+        print(f"[INFO] MainScraper: Will translate search terms from 'en' to '{target_language}' when needed.")
         try:
             translator = Translator(source_lang='en', target_lang=target_language)
-            translated_categories = {}
-            for category, products in categories_amazon_products.items():
-                translated = [translator.translate(product) for product in products]
-                translated_categories[category] = translated
-            print("[INFO] MainScraper: Translation completed.")
         except Exception as e:
-            print(f"[ERROR] MainScraper: Translation failed: {e}")
+            print(f"[ERROR] MainScraper: Translator initialization failed: {e}")
             traceback.print_exc()
             translator = None
-            translated_categories = categories_amazon_products.copy()
     else:
         translator = None
-        translated_categories = categories_amazon_products.copy()
         print("[INFO] MainScraper: No translation needed, target language is 'en'.")
 
-    # Print translated words
-    print("[INFO] MainScraper: Translated words:")
-    for cat, prods in translated_categories.items():
-        print(f"  Category '{cat}':")
-        for orig, trans in zip(categories_amazon_products[cat], prods):
+    # STEP 3: Process each category one by one
+    for category, products in categories_amazon_products.items():
+        print(f"\n[INFO] MainScraper: Starting category: {category}")
+
+        # Translate products for this category on-the-fly
+        if translator:
+            try:
+                translated_products = [translator.translate(product) for product in products]
+            except Exception as e:
+                print(f"[ERROR] MainScraper: Translation for category '{category}' failed: {e}")
+                traceback.print_exc()
+                translated_products = products
+        else:
+            translated_products = products
+
+        # Print translated words for the current category
+        print("[INFO] MainScraper: Translated words for the current category:")
+        for orig, trans in zip(products, translated_products):
             print(f"    '{orig}' -> '{trans}'")
 
-    # Remove translator to free memory
-    if translator:
-        del translator
-        print("[INFO] MainScraper: Translator removed from memory.")
-
-    # STEP 3: DISTRIBUTE TASKS WITH TRANSLATED WORDS TO WORKERS
-    for category, products in translated_categories.items():
-        print(f"\n[INFO] MainScraper: Starting category: {category}")
+        # Check if we still have active workers
         if not active_workers:
             print("[WARNING] No active workers left.")
             break
 
+        # Distribute products among active workers
         product_chunks = [[] for _ in active_workers]
-
-        for idx, product in enumerate(products):
+        for idx, product in enumerate(translated_products):
             worker_idx = idx % len(active_workers)
             worker_index = sorted(active_workers)[worker_idx]
             product_chunks[worker_index].append(product)
@@ -343,20 +342,21 @@ def main_scraper(site_info, categories_amazon_products, n_workers=2):
             task_queue.put(task)
             print(f"[INFO] MainScraper: Assigned {len(product_chunks[i])} products to Worker-{worker_index}")
 
+        # Wait for all workers to finish the current category
         completed_workers = set()
         while len(completed_workers) < len(active_workers):
             msg = status_queue.get()
             status = msg[0]
             worker_index = msg[1]
             if status == 'done':
-                print(f"[INFO] MainScraper: Worker-{worker_index} completed its task.")
+                print(f"[INFO] MainScraper: Worker-{worker_index} completed its task for category '{category}'.")
                 completed_workers.add(worker_index)
             elif status == 'captcha':
                 print(f"[CAPTCHA] MainScraper: Worker-{worker_index} requires CAPTCHA resolution.")
                 input("Press Enter after resolving CAPTCHA...")
                 captcha_events[worker_index].set()
             elif status == 'failed':
-                print(f"[ERROR] MainScraper: Worker-{worker_index} failed.")
+                print(f"[ERROR] MainScraper: Worker-{worker_index} failed on category '{category}'.")
                 active_workers.discard(worker_index)
                 completed_workers.add(worker_index)
 
@@ -372,6 +372,7 @@ def main_scraper(site_info, categories_amazon_products, n_workers=2):
         print(f"[INFO] MainScraper: Worker PID {process.pid} has terminated.")
 
     print("***** All searches completed *****")
+
 
 
 if __name__ == "__main__":
