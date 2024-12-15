@@ -12,6 +12,8 @@ import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 import re
 from bs4 import BeautifulSoup, Tag
+from langdetect import detect, DetectorFactory, LangDetectException
+import pycountry
 
 from UniversalWebshopScraper.generalized_scrapper.core.functions import normalize_price, normalize_url
 
@@ -37,7 +39,7 @@ class GeneralizedScraper:
                                        persistence of session information between scrapes.
         initialize_driver_func (callable, optional): Custom function to initialize the WebDriver.
     """
-    def __init__(self, shopping_website=None, user_data_dir=None, offline_mode=False, initialize_driver_func=None):
+    def __init__(self, shopping_website=None, user_data_dir=None, offline_mode=False, initialize_driver_func=None, language='eng'):
         """
         Initializes the GeneralizedScraper instance with necessary attributes
         for web scraping operations.
@@ -70,6 +72,8 @@ class GeneralizedScraper:
         self.parent_blocks = []  # List to store all parent blocks (convert to set later if needed)
         self.product_count = 0  # Counter for the number of products detected
         self.stored_products = []  # List to store gathered products (dict format)
+
+        self.detected_language = language
 
     def default_initialize_driver(self):
         """
@@ -809,6 +813,33 @@ class GeneralizedScraper:
 
         # clear all trash titles after scraping all products on all pages
         self.wrong_titles.clear()
+
+    def detect_language(self, text):
+        """
+        Detect the language of the given text using langdetect.
+
+        Args:
+            text (str): The text whose language needs to be detected.
+
+        Returns:
+            str: Full name of the detected language, or 'Unknown' if detection fails.
+        """
+        try:
+            # Ensure consistent results
+            DetectorFactory.seed = 0
+            language_code = detect(text)
+            language = pycountry.languages.get(alpha_2=language_code)
+            if language:
+                return language.name
+            else:
+                return language_code  # Return code if full name not found
+        except LangDetectException:
+            print("Language detection failed, choosing English as default.")
+            return "en"
+        except Exception as e:
+            print(f"Error in language detection: {e}")
+            print("Choosing English as default.")
+            return "en"
 
 
 if __name__ == "__main__":
