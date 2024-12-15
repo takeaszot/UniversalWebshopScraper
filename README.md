@@ -120,10 +120,11 @@ graph LR
     P --> Q[Save Results (CSV)]
     Q --> R[End]
 
-    class A,R,X startEnd
-    class B,C,E,G,H,I,J,K,M,N,P process
-    class D,F,L,O decision
-    class Q io
+    class A,R,X startEnd;
+    class B,C,E,G,H,I,J,K,M,N,P process;
+    class D,F,L,O decision;
+    class Q io;
+
                     
 
 ```
