@@ -9,7 +9,6 @@ import os
 from contextlib import contextmanager
 from colorama import Fore, Style, init
 import pycountry
-from transformers import MarianMTModel, MarianTokenizer
 
 from vectorproduct.translator import Translator
 
@@ -86,63 +85,6 @@ def redirect_stdout_stderr(worker_index, log_func):
         sys.stdout, sys.stderr = old_stdout, old_stderr
 
 
-class Translator:
-    """
-    A simple translator class using MarianMT models from Hugging Face.
-    Once instantiated with source and target languages,
-    call .translate(texts) to translate.
-    """
-    # List of supported languages (partial list for demonstration)
-    SUPPORTED_LANGUAGES = {
-        "pl": "Polish",
-        "en": "English",
-        "zh": "Chinese",
-        "fr": "French",
-        "de": "German",
-        "es": "Spanish",
-        "it": "Italian",
-        "ja": "Japanese",
-        "ko": "Korean",
-        "ru": "Russian",
-        "ar": "Arabic",
-    }
-
-    def __init__(self, source_lang: str = "en", target_lang: str = "pl"):
-        self.source_lang = source_lang.lower()
-        self.target_lang = target_lang.lower()
-
-        if self.source_lang not in Translator.SUPPORTED_LANGUAGES:
-            print(f"Warning: Source language '{source_lang}' may not be supported. Proceeding anyway.")
-        if self.target_lang not in Translator.SUPPORTED_LANGUAGES:
-            print(f"Warning: Target language '{target_lang}' may not be supported. Proceeding anyway.")
-
-        # Construct the model name. For example:
-        # English to Polish: "Helsinki-NLP/opus-mt-en-pl"
-        self.model_name = f"Helsinki-NLP/opus-mt-{self.source_lang}-{self.target_lang}"
-
-        # Load tokenizer and model
-        try:
-            self.tokenizer = MarianTokenizer.from_pretrained(self.model_name)
-            self.model = MarianMTModel.from_pretrained(self.model_name)
-        except Exception as e:
-            print(f"Error loading model '{self.model_name}'. Please check if the language pair is supported.")
-            raise e
-
-    def translate(self, texts):
-        if not isinstance(texts, list):
-            texts = [texts]
-        translated = []
-        for text in texts:
-            if not text.strip():
-                translated.append(text)
-                continue
-            inputs = self.tokenizer([text], return_tensors="pt", padding=True, truncation=True)
-            translated_tokens = self.model.generate(**inputs)
-            translated_text = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
-            translated.append(translated_text)
-        return translated
-
-
 def worker_process(task_queue, status_queue, detected_image_urls, worker_index, captcha_event, site_info):
     """
     Worker process that can detect language (if instructed) or scrape products.
@@ -203,6 +145,10 @@ def worker_process(task_queue, status_queue, detected_image_urls, worker_index, 
                                 status_queue.put(("lang_failed", worker_index))
                             else:
                                 text = soup.get_text(separator=' ', strip=True)
+
+                                # **Log the entire extracted text**
+                                print(f"Extracted Text Sample: {text}...")
+
                                 lang = scraper.detect_language(text)
                                 print(f"Detected language: {lang}")
                                 status_queue.put(("lang_detected", worker_index, lang))
@@ -253,7 +199,7 @@ def worker_process(task_queue, status_queue, detected_image_urls, worker_index, 
                             save_dir = os.path.join(base_data_path, f"{shop_name}", f"{category}")
                             os.makedirs(save_dir, exist_ok=True)
                             save_path = os.path.join(save_dir, f"{product}.csv")
-                            scraper.scrape_all_products(scroll_based=True, url_template=search_url, page_number_supported=True)
+                            scraper.scrape_all_products(scroll_based=True, url_template=search_url, page_number_supported=True, max_pages=3)
                             scraper.save_to_csv(save_path=save_path, category=category)
                             scraper.stored_products.clear()
 
