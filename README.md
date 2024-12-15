@@ -87,10 +87,10 @@ The **UniversalWebshopScraper** follows a multi-stage pipeline to scrape product
 ```mermaid
 graph LR
 
-    classDef startEnd fill=#4CAF50,stroke=#333,stroke-width=1px,color=#fff;
-    classDef process fill=#2196F3,stroke=#333,stroke-width=1px,color=#fff;
-    classDef decision fill=#FFC107,stroke=#333,stroke-width=1px,color=#fff;
-    classDef io fill=#9C27B0,stroke=#333,stroke-width=1px,color=#fff;
+    classDef startEnd fill:#4CAF50,stroke:#333,stroke-width:1px,color:#fff;
+    classDef process fill:#2196F3,stroke:#333,stroke-width:1px,color:#fff;
+    classDef decision fill:#FFC107,stroke:#333,stroke-width:1px,color:#fff;
+    classDef io fill:#9C27B0,stroke:#333,stroke-width:1px,color:#fff;
 
     A[Start] --> B[Initialize Main Process]
     B --> C[Spawn Workers]
@@ -124,4 +124,5 @@ graph LR
     class B,C,E,G,H,I,J,K,M,N,P process
     class D,F,L,O decision
     class Q io
+
 ```
