@@ -102,8 +102,8 @@ graph LR
     F -->|Yes| G[No Translation Needed]
     F -->|No| H[Initialize Translator]
 
-    G --> I[For Each Category: If Needed, Translate Products]
-    H --> I[For Each Category: If Needed, Translate Products]
+    G --> I[Translate Products if Needed]
+    H --> I[Translate Products if Needed]
 
     I --> J[Distribute Category Tasks to Workers]
     J --> K[Workers Scrape Products]
@@ -124,5 +124,6 @@ graph LR
     class B,C,E,G,H,I,J,K,M,N,P process
     class D,F,L,O decision
     class Q io
+                    
 
 ```
