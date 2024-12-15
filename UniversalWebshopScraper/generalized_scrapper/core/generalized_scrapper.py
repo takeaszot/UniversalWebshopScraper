@@ -237,9 +237,6 @@ class GeneralizedScraper:
             soup = self.extract_page_structure()
             if self.is_captcha_present(soup):
                 input("Resolve Captcha and click enter button")
-            return True
-
-
             self.driver.get(home_url)
             self.random_delay()
             soup = self.extract_page_structure()

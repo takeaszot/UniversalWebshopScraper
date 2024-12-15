@@ -133,29 +133,16 @@ def worker_process(task_queue, status_queue, detected_image_urls, worker_index, 
                     home_url = site_info_task.get("home_url", "")
                     # Open homepage and detect language
                     scraper.shopping_website = home_url
-                    if not scraper.open_home_page(home_url):
-                        print("Failed to open home page for language detection.")
-                        status_queue.put(("lang_failed", worker_index))
-                    else:
-                        # Extract soup and text from soup
-                        try:
-                            soup = scraper.extract_page_structure()
-                            if soup is None:
-                                print("Failed to extract page structure for language detection.")
-                                status_queue.put(("lang_failed", worker_index))
-                            else:
-                                text = soup.get_text(separator=' ', strip=True)
+                    scraper.open_home_page(home_url)
+                    soup = scraper.extract_page_structure()
+                    text = soup.get_text(separator=' ', strip=True)
+                    # **Log the entire extracted text**
+                    print(f"Extracted Text Sample: {text[:1000]}...")  # Logs first 1000 characters
 
-                                # **Log the entire extracted text**
-                                print(f"Extracted Text Sample: {text}...")
+                    lang = scraper.detect_language(text)
+                    print(f"Detected language: {lang}")
+                    status_queue.put(("lang_detected", worker_index, lang))
 
-                                lang = scraper.detect_language(text)
-                                print(f"Detected language: {lang}")
-                                status_queue.put(("lang_detected", worker_index, lang))
-                        except Exception as e:
-                            print(f"Error during language detection: {e}")
-                            traceback.print_exc()
-                            status_queue.put(("lang_failed", worker_index))
                 else:
                     # Normal scraping task: (site_info, category, product_list)
                     site_info_task, category, product_list = task
@@ -402,7 +389,7 @@ if __name__ == "__main__":
     from UniversalWebshopScraper.generalized_scrapper.core.product_categories import categories_products
     # from UniversalWebshopScraper.generalized_scrapper.checker.missing_products import categories_products
 
-    n_workers = 2  # Number of workers to spawn
+    n_workers = 1  # Number of workers to spawn
 
     # Loop through the shopping sites and start the scraper
     for site_info in shopping_sites:
