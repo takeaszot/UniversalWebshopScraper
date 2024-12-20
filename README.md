@@ -44,6 +44,8 @@ Parent Directory/
     │   │   │
     │   │   ├── checker/           # Module for validation and checking
     │   │   │
+    │   │   ├── captcha_solver/    # Module for captcha
+    │   │   │
     │   │   ├── core/              # Core utilities and modules
     │   │   │   └── generalized_scraper.py # Main generalized scraper class and methods
     │   │   │
