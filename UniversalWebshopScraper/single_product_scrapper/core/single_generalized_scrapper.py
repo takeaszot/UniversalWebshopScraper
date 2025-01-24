@@ -7,7 +7,6 @@ from bs4 import BeautifulSoup
 
 from vectorproduct.utils.time_decorators import time_it
 
-
 class SingleProductGeneralizedScraper:
     def __init__(self, shopping_website, home_page):
         """
