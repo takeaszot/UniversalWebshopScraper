@@ -282,16 +282,16 @@ if __name__ == "__main__":
 
     # Define shopping sites to scrape
     shopping_sites = [
-        {"name": "aliexpress",
-         "home_url": "https://www.aliexpress.com",
-         "search_url_template": '{base_url}/w/wholesale-{query}.html?page={{page_number}}'},
+        {"name": "ebay",
+         "home_url": "https://www.ebay.com",
+         "search_url_template": "{base_url}/sch/i.html?_nkw={query}&_pgn={{page_number}}"},
     ]
 
     # Import the product categories for scraping
-    # from UniversalWebshopScraper.generalized_scrapper.core.product_categories import categories_products
-    from UniversalWebshopScraper.generalized_scrapper.checker.missing_products import categories_products
+    from UniversalWebshopScraper.generalized_scrapper.core.product_categories import categories_products
+    # from UniversalWebshopScraper.generalized_scrapper.checker.missing_products import categories_products
 
-    n_workers = 10  # Number of workers to spawn
+    n_workers = 2  # Number of workers to spawn
 
     # Loop through the shopping sites and start the scraper
     for site_info in shopping_sites:

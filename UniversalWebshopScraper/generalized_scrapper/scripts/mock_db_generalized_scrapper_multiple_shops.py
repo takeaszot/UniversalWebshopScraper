@@ -54,15 +54,12 @@ if __name__ == "__main__":
         {"name": "ebay", "home_url": "https://www.ebay.com", "search_url_template": "{base_url}/sch/i.html?_nkw={query}&_pgn={{page_number}}"},
         {"name": "amazon", "home_url": "https://www.amazon.com", "search_url_template": "{base_url}/s?k={query}&page={page_number}"}
     ]
+    from UniversalWebshopScraper.generalized_scrapper.core.product_categories import categories_products
 
-    categories_amazon_products = {
-        "electronics": ["tv", "smartphone", "laptop"],
-        "home_appliances": ["vacuum cleaner", "microwave", "blender"]
-    }
 
     processes = []
     for site_info in shopping_sites:
-        process = Process(target=run_scraper, args=(site_info, categories_amazon_products))
+        process = Process(target=run_scraper, args=(site_info, categories_products))
         processes.append(process)
         process.start()
 
